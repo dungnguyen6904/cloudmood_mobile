@@ -62,19 +62,13 @@ CREATE TABLE public.Itinerary (
   days bigint,
   budget bigint,
   userId bigint NOT NULL,
+  destination character varying NOT NULL,
+  companion character varying,
+  pace character varying,
+  categories ARRAY,
+  amenities ARRAY,
   CONSTRAINT Itinerary_pkey PRIMARY KEY (id),
   CONSTRAINT fk_itinerary_user FOREIGN KEY (userId) REFERENCES public.User(id)
-);
-CREATE TABLE public.ItineraryDetail (
-  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
-  arrivalTime time with time zone NOT NULL,
-  leaveTime time with time zone NOT NULL,
-  order character varying NOT NULL,
-  placeId bigint NOT NULL,
-  itineraryId bigint NOT NULL,
-  CONSTRAINT ItineraryDetail_pkey PRIMARY KEY (id),
-  CONSTRAINT fk_detail_itinerary FOREIGN KEY (itineraryId) REFERENCES public.Itinerary(id),
-  CONSTRAINT fk_detail_place FOREIGN KEY (placeId) REFERENCES public.Place(id)
 );
 CREATE TABLE public.PlacePhoto (
   id bigint NOT NULL DEFAULT nextval('"PlacePhoto_id_seq"'::regclass),
@@ -85,4 +79,43 @@ CREATE TABLE public.PlacePhoto (
   source character varying DEFAULT 'TRIPADVISOR'::character varying,
   CONSTRAINT PlacePhoto_pkey PRIMARY KEY (id),
   CONSTRAINT PlacePhoto_placeId_fkey FOREIGN KEY (placeId) REFERENCES public.Place(id)
+);
+CREATE TABLE public.ItinerarySavedPlace (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  itineraryId bigint NOT NULL,
+  placeId bigint,
+  section character varying NOT NULL,
+  noteText text,
+  reactions jsonb NOT NULL DEFAULT '[]'::jsonb,
+  isCollapsed boolean NOT NULL DEFAULT false,
+  sortOrder integer NOT NULL DEFAULT 0,
+  todoItems jsonb NOT NULL DEFAULT '[]'::jsonb,
+  CONSTRAINT ItinerarySavedPlace_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_saved_itinerary FOREIGN KEY (itineraryId) REFERENCES public.Itinerary(id),
+  CONSTRAINT fk_saved_place FOREIGN KEY (placeId) REFERENCES public.Place(id)
+);
+CREATE TABLE public.ItineraryDetail (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  arrivalTime time with time zone NOT NULL DEFAULT '09:00:00+07'::time with time zone,
+  leaveTime time with time zone NOT NULL DEFAULT '11:00:00+07'::time with time zone,
+  day integer NOT NULL,
+  sortOrder integer NOT NULL DEFAULT 0,
+  placeId bigint NOT NULL,
+  itineraryId bigint NOT NULL,
+  CONSTRAINT ItineraryDetail_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_detail_itinerary FOREIGN KEY (itineraryId) REFERENCES public.Itinerary(id),
+  CONSTRAINT fk_detail_place FOREIGN KEY (placeId) REFERENCES public.Place(id)
+);
+CREATE TABLE public.ChecklistTemplateCategory (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name character varying NOT NULL,
+  tabType character varying NOT NULL,
+  CONSTRAINT ChecklistTemplateCategory_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.ChecklistTemplateItem (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  categoryId bigint NOT NULL,
+  name character varying NOT NULL,
+  CONSTRAINT ChecklistTemplateItem_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_item_category FOREIGN KEY (categoryId) REFERENCES public.ChecklistTemplateCategory(id)
 );

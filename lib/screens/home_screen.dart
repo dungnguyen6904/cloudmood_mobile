@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import 'create_itinerary_wizard_sheet.dart';
+import 'trip_overview_screen.dart';
 
 class CloudmoodHomeScreen extends StatefulWidget {
   final VoidCallback onProfileTap;
@@ -1312,14 +1313,22 @@ class CreateMenuOverlay extends StatelessWidget {
       return;
     }
 
-    showModalBottomSheet(
+    showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return CreateItineraryWizardSheet(userId: user.id);
       },
-    );
+    ).then((result) {
+      if (result != null && context.mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => TripOverviewScreen(itinerary: result),
+          ),
+        );
+      }
+    });
   }
 
   Widget _buildOverlayCard({

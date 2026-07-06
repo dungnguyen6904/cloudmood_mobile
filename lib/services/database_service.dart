@@ -10,6 +10,15 @@ class DatabaseService {
   DatabaseService._internal();
 
   final _supabase = Supabase.instance.client;
+  SupabaseClient? _serviceRoleClient;
+
+  SupabaseClient get _adminClient {
+    _serviceRoleClient ??= SupabaseClient(
+      'https://mrulzaiktzljosdgfivt.supabase.co',
+      dotenv.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '',
+    );
+    return _serviceRoleClient!;
+  }
 
   /// Checks if categories and places are empty in the database, and if so, seeds them with default data
   Future<void> checkAndSeedData() async {
@@ -239,9 +248,9 @@ class DatabaseService {
   /// Fetches all itineraries created by the user
   Future<List<Map<String, dynamic>>> fetchUserItineraries(int userId) async {
     try {
-      final response = await _supabase
+      final response = await _adminClient
           .from('Itinerary')
-          .select('*, ItineraryDetail(*, Place(*))')
+          .select('*, ItineraryDetail(*, Place(*, Category(*))), ItinerarySavedPlace(*, Place(*, Category(*)))')
           .eq('userId', userId)
           .order('id', ascending: false);
       return List<Map<String, dynamic>>.from(response);
@@ -369,4 +378,235 @@ class DatabaseService {
       return false;
     }
   }
+
+  /// Fetches a single itinerary with its details and places by ID
+  Future<Map<String, dynamic>?> fetchItineraryById(int itineraryId) async {
+    try {
+      final response = await _adminClient
+          .from('Itinerary')
+          .select('*, ItineraryDetail(*, Place(*, Category(*))), ItinerarySavedPlace(*, Place(*, Category(*)))')
+          .eq('id', itineraryId)
+          .single();
+      return response;
+    } catch (e) {
+      debugPrint('Error fetching itinerary by id: $e');
+      return null;
+    }
+  }
+
+  /// Adds a place to an itinerary's day details
+  Future<Map<String, dynamic>?> addPlaceToItinerary({
+    required int itineraryId,
+    required int placeId,
+    required int day,
+    String arrivalTime = '09:00:00+07',
+    String leaveTime = '11:00:00+07',
+    int sortOrder = 0,
+  }) async {
+    try {
+      final data = {
+        'itineraryId': itineraryId,
+        'placeId': placeId,
+        'day': day,
+        'arrivalTime': arrivalTime,
+        'leaveTime': leaveTime,
+        'sortOrder': sortOrder,
+      };
+      final response = await _adminClient
+          .from('ItineraryDetail')
+          .insert(data)
+          .select('*, Place(*, Category(*))')
+          .single();
+      refreshTrigger.value++; // Trigger reactive update
+      return response;
+    } catch (e) {
+      debugPrint('Error adding place to itinerary: $e');
+      return null;
+    }
+  }
+
+  /// Deletes a place from an itinerary's details
+  Future<bool> deletePlaceFromItinerary(int detailId) async {
+    try {
+      await _adminClient
+          .from('ItineraryDetail')
+          .delete()
+          .eq('id', detailId);
+      refreshTrigger.value++; // Trigger reactive update
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting place from itinerary: $e');
+      return false;
+    }
+  }
+
+  /// Adds a place or note to an itinerary's saved places (Overview)
+  Future<Map<String, dynamic>?> addPlaceToSaved({
+    required int itineraryId,
+    int? placeId,
+    required String section,
+    String? noteText,
+    int? sortOrder,
+  }) async {
+    try {
+      int finalSortOrder = sortOrder ?? 0;
+      if (sortOrder == null) {
+        final response = await _adminClient
+            .from('ItinerarySavedPlace')
+            .select('sortOrder')
+            .eq('itineraryId', itineraryId)
+            .eq('section', section)
+            .order('sortOrder', ascending: false)
+            .limit(1);
+        if (response != null && (response as List).isNotEmpty) {
+          finalSortOrder = ((response as List)[0]['sortOrder'] ?? 0) + 1;
+        }
+      }
+
+      final data = {
+        'itineraryId': itineraryId,
+        if (placeId != null) 'placeId': placeId,
+        'section': section,
+        if (noteText != null) 'noteText': noteText,
+        'sortOrder': finalSortOrder,
+      };
+      final response = await _adminClient
+          .from('ItinerarySavedPlace')
+          .insert(data)
+          .select('*, Place(*, Category(*))')
+          .single();
+      refreshTrigger.value++; // Trigger reactive update
+      return response;
+    } catch (e) {
+      debugPrint('Error adding to saved list: $e');
+      return null;
+    }
+  }
+
+  /// Deletes a place or note from saved places
+  Future<bool> deletePlaceFromSaved(int savedId) async {
+    try {
+      await _adminClient
+          .from('ItinerarySavedPlace')
+          .delete()
+          .eq('id', savedId);
+      refreshTrigger.value++; // Trigger reactive update
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting from saved list: $e');
+      return false;
+    }
+  }
+
+  /// Updates the sort order of a saved place or note
+  Future<bool> updateSavedItemOrder(int itemId, int newSortOrder) async {
+    try {
+      await _adminClient
+          .from('ItinerarySavedPlace')
+          .update({'sortOrder': newSortOrder})
+          .eq('id', itemId);
+      refreshTrigger.value++; // Trigger reactive update
+      return true;
+    } catch (e) {
+      debugPrint('Error updating saved item order: $e');
+      return false;
+    }
+  }
+
+  /// Updates the reactions list of a saved note
+  Future<bool> updateSavedItemReactions(int itemId, List<dynamic> reactions) async {
+    try {
+      await _adminClient
+          .from('ItinerarySavedPlace')
+          .update({'reactions': reactions})
+          .eq('id', itemId);
+      refreshTrigger.value++; // Trigger reactive update
+      return true;
+    } catch (e) {
+      debugPrint('Error updating saved item reactions: $e');
+      return false;
+    }
+  }
+
+  /// Updates the collapse state of a saved note
+  Future<bool> updateSavedItemCollapse(int itemId, bool isCollapsed) async {
+    try {
+      await _adminClient
+          .from('ItinerarySavedPlace')
+          .update({'isCollapsed': isCollapsed})
+          .eq('id', itemId);
+      refreshTrigger.value++; // Trigger reactive update
+      return true;
+    } catch (e) {
+      debugPrint('Error updating saved item collapse: $e');
+      return false;
+    }
+  }
+  /// Updates the text of a saved note
+  Future<bool> updateSavedItemText(int itemId, String text) async {
+    try {
+      await _adminClient
+          .from('ItinerarySavedPlace')
+          .update({'noteText': text})
+          .eq('id', itemId);
+      refreshTrigger.value++; // Trigger reactive update
+      return true;
+    } catch (e) {
+      debugPrint('Error updating saved item text: $e');
+      return false;
+    }
+  }
+
+  /// Fetches checklist templates with categories and items
+  Future<List<Map<String, dynamic>>> fetchChecklistTemplates() async {
+    try {
+      final cats = await _supabase.from('ChecklistTemplateCategory').select('*');
+      final items = await _supabase.from('ChecklistTemplateItem').select('*');
+      
+      final List<Map<String, dynamic>> result = [];
+      for (var cat in cats) {
+        final catId = cat['id'];
+        final catItems = items.where((it) => it['categoryId'] == catId || it['categoryid'] == catId).toList();
+        result.add({
+          ...cat,
+          'items': catItems,
+        });
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Error fetching checklist templates: $e');
+      return [];
+    }
+  }
+
+  /// Updates the todoItems jsonb array of a saved checklist
+  Future<bool> updateSavedItemTodoItems(int itemId, List<dynamic> todoItems) async {
+    try {
+      await _adminClient
+          .from('ItinerarySavedPlace')
+          .update({'todoItems': todoItems})
+          .eq('id', itemId);
+      refreshTrigger.value++; // Trigger reactive update
+      return true;
+    } catch (e) {
+      debugPrint('Error updating saved item todo items: $e');
+      return false;
+    }
+  }
+
+  /// Fetches places located in/near a specific destination city
+  Future<List<Map<String, dynamic>>> fetchPlacesByDestination(String cityName) async {
+    try {
+      final response = await _supabase
+          .from('Place')
+          .select('*, Category(*)')
+          .or('address.ilike.%$cityName%,name.ilike.%$cityName%')
+          .order('rating', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error fetching places by destination: $e');
+      return [];
+    }
+  }
 }
+

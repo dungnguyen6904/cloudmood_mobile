@@ -347,7 +347,7 @@ class _CreateItineraryWizardSheetState
 
       if (mounted) {
         if (result != null) {
-          Navigator.of(context).pop();
+          Navigator.of(context).pop(result);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Đã thêm hành trình mới thành công!'),

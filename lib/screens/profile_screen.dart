@@ -5,6 +5,7 @@ import '../services/database_service.dart';
 import '../models/user.dart';
 import 'login_screen.dart';
 import 'create_itinerary_wizard_sheet.dart';
+import 'trip_overview_screen.dart';
 
 class CloudmoodProfileScreen extends StatefulWidget {
   const CloudmoodProfileScreen({super.key});
@@ -585,14 +586,22 @@ class _ProfileDashboardState extends State<ProfileDashboard>
 
   // Show Bottom Sheet to Create Itinerary
   void _showCreateItinerarySheet(BuildContext context) {
-    showModalBottomSheet(
+    showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return CreateItineraryWizardSheet(userId: widget.user.id);
       },
-    );
+    ).then((result) {
+      if (result != null && context.mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => TripOverviewScreen(itinerary: result),
+          ),
+        );
+      }
+    });
   }
 
   // Star Rating Bar builder
@@ -908,70 +917,79 @@ class _ProfileDashboardState extends State<ProfileDashboard>
           (item['budget'] as num?)?.toInt() ?? 0,
         );
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(12),
-          decoration: AppTheme.premiumCardDecoration(radius: 16),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=300&auto=format&fit=crop&q=80',
-                  width: 70,
-                  height: 70,
-                  fit: BoxFit.cover,
-                ),
+        return GestureDetector(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => TripOverviewScreen(itinerary: item),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item['title'] ?? 'Chuyến đi không tên',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: AppTheme.darkText,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${item['days']} ngày · Bắt đầu: ${item['startDate']}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.subtitleText,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryPeach,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'Chi phí: $budgetFormatted',
+            );
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: AppTheme.premiumCardDecoration(radius: 16),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=300&auto=format&fit=crop&q=80',
+                    width: 70,
+                    height: 70,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item['title'] ?? 'Chuyến đi không tên',
                         style: const TextStyle(
-                          fontSize: 10,
-                          color: AppTheme.primary,
                           fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: AppTheme.darkText,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        '${item['days']} ngày · Bắt đầu: ${item['startDate']}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.subtitleText,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryPeach,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Chi phí: $budgetFormatted',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppTheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 14,
-                color: Colors.black26,
-              ),
-            ],
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: Colors.black26,
+                ),
+              ],
+            ),
           ),
         );
       },
