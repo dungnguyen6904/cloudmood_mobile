@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/hotel_screen.dart';
@@ -9,9 +10,13 @@ import 'services/database_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Load environment variables from assets/env
+  await dotenv.load(fileName: "assets/env");
+  
   await Supabase.initialize(
     url: 'https://mrulzaiktzljosdgfivt.supabase.co',
-    publishableKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ydWx6YWlrdHpsam9zZGdmaXZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MTIyMDMsImV4cCI6MjA5ODI4ODIwM30.oNLeGVXQ6TwIsGFtLAl5VXrGyKHVn-BGN2yvLBADVUA',
+    publishableKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
   );
   
   // Seed initial categories & places in Supabase if empty

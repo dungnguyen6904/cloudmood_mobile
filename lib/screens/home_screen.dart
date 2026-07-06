@@ -3,14 +3,12 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
+import 'create_itinerary_wizard_sheet.dart';
 
 class CloudmoodHomeScreen extends StatefulWidget {
   final VoidCallback onProfileTap;
 
-  const CloudmoodHomeScreen({
-    super.key,
-    required this.onProfileTap,
-  });
+  const CloudmoodHomeScreen({super.key, required this.onProfileTap});
 
   @override
   State<CloudmoodHomeScreen> createState() => _CloudmoodHomeScreenState();
@@ -103,10 +101,7 @@ class HeaderWidget extends StatelessWidget {
                 },
               ),
               const SizedBox(width: 8),
-              const Text(
-                'cloudmood',
-                style: AppTheme.brandLogoStyle,
-              ),
+              const Text('cloudmood', style: AppTheme.brandLogoStyle),
             ],
           ),
           // Right: Action Buttons
@@ -114,7 +109,10 @@ class HeaderWidget extends StatelessWidget {
             children: [
               // Show Pro Badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: AppTheme.primaryPeach,
                   borderRadius: BorderRadius.circular(20),
@@ -125,11 +123,7 @@ class HeaderWidget extends StatelessWidget {
                 ),
                 child: const Row(
                   children: [
-                    Icon(
-                      Icons.star_rounded,
-                      color: AppTheme.amber,
-                      size: 16,
-                    ),
+                    Icon(Icons.star_rounded, color: AppTheme.amber, size: 16),
                     SizedBox(width: 4),
                     Text(
                       'PRO',
@@ -156,15 +150,17 @@ class HeaderWidget extends StatelessWidget {
                         color: AppTheme.lightGray,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: user != null ? AppTheme.primary : Colors.black12,
+                          color: user != null
+                              ? AppTheme.primary
+                              : Colors.black12,
                           width: 1.5,
                         ),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withAlpha(10),
                             blurRadius: 4,
-                          )
-                        ]
+                          ),
+                        ],
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(19),
@@ -175,7 +171,10 @@ class HeaderWidget extends StatelessWidget {
                                 height: 38,
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) =>
-                                    const Icon(Icons.person, color: AppTheme.subtitleText),
+                                    const Icon(
+                                      Icons.person,
+                                      color: AppTheme.subtitleText,
+                                    ),
                               )
                             : const Icon(
                                 Icons.person_outline_rounded,
@@ -353,7 +352,9 @@ class MoodSelectorWidget extends StatelessWidget {
                         mood['label']!,
                         style: TextStyle(
                           fontSize: 13,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w500,
                           color: isSelected ? Colors.white : AppTheme.darkText,
                         ),
                       ),
@@ -377,34 +378,43 @@ class FeaturedGuidesSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final List<Map<String, String>> guides = [
       {
-        'image': 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600&auto=format&fit=crop&q=80',
+        'image':
+            'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600&auto=format&fit=crop&q=80',
         'title': 'Where You Go on Wednesday in Bali',
-        'desc': 'Having spent the past six years exploring Bali, I\'ve developed a deep appreciation for its hidden gems and vibrant culture...',
+        'desc':
+            'Having spent the past six years exploring Bali, I\'ve developed a deep appreciation for its hidden gems and vibrant culture...',
         'author': 'Bali',
         'views': '76 lượt xem',
         'rating': '4.9',
         'category': 'Cẩm nang',
-        'avatar': 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+        'avatar':
+            'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
       },
       {
-        'image': 'https://images.unsplash.com/photo-1506929562872-bb421503ef21?w=600&auto=format&fit=crop&q=80',
+        'image':
+            'https://images.unsplash.com/photo-1506929562872-bb421503ef21?w=600&auto=format&fit=crop&q=80',
         'title': 'What Happens in Bali on Wednesday: Best Places to Be',
-        'desc': 'Lived in Bali for the past decade, capturing the finest sunset viewpoints and local hotspots that will leave you in awe...',
+        'desc':
+            'Lived in Bali for the past decade, capturing the finest sunset viewpoints and local hotspots that will leave you in awe...',
         'author': 'Bali',
         'views': '71 lượt xem',
         'rating': '4.7',
         'category': 'Gợi ý',
-        'avatar': 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80',
+        'avatar':
+            'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80',
       },
       {
-        'image': 'https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=600&auto=format&fit=crop&q=80',
+        'image':
+            'https://images.unsplash.com/photo-1552674605-db6ffd4facb5?w=600&auto=format&fit=crop&q=80',
         'title': 'Ultimate 3-Day Itinerary for First-Timers in Singapore',
-        'desc': 'From Marina Bay Sands to hidden food stalls, discover how to spend your weekend in the lion city perfectly...',
+        'desc':
+            'From Marina Bay Sands to hidden food stalls, discover how to spend your weekend in the lion city perfectly...',
         'author': 'Singapore Guide',
         'views': '124 lượt xem',
         'rating': '4.8',
         'category': 'Hành trình',
-        'avatar': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80',
+        'avatar':
+            'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80',
       },
     ];
 
@@ -413,10 +423,7 @@ class FeaturedGuidesSection extends StatelessWidget {
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 16.0),
-          child: Text(
-            'Hướng dẫn nổi bật',
-            style: AppTheme.sectionTitleStyle,
-          ),
+          child: Text('Hướng dẫn nổi bật', style: AppTheme.sectionTitleStyle),
         ),
         const SizedBox(height: 12),
         SizedBox(
@@ -449,7 +456,9 @@ class FeaturedGuidesSection extends StatelessWidget {
                     Stack(
                       children: [
                         ClipRRect(
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
                           child: Image.network(
                             guide['image']!,
                             height: 140,
@@ -459,7 +468,10 @@ class FeaturedGuidesSection extends StatelessWidget {
                               return Container(
                                 height: 140,
                                 color: Colors.grey[200],
-                                child: const Icon(Icons.image, color: Colors.grey),
+                                child: const Icon(
+                                  Icons.image,
+                                  color: Colors.grey,
+                                ),
                               );
                             },
                           ),
@@ -468,7 +480,10 @@ class FeaturedGuidesSection extends StatelessWidget {
                           top: 12,
                           left: 12,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: AppTheme.primary,
                               borderRadius: BorderRadius.circular(10),
@@ -487,7 +502,10 @@ class FeaturedGuidesSection extends StatelessWidget {
                           top: 12,
                           right: 12,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.black.withAlpha(150),
                               borderRadius: BorderRadius.circular(10),
@@ -598,15 +616,18 @@ class WeekendTripsSection extends StatelessWidget {
     final List<Map<String, String>> trips = [
       {
         'name': 'Singapore',
-        'image': 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=400&auto=format&fit=crop&q=80',
+        'image':
+            'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=400&auto=format&fit=crop&q=80',
       },
       {
         'name': 'Johor Bahru',
-        'image': 'https://images.unsplash.com/photo-1596422846543-75c6fc18a523?w=400&auto=format&fit=crop&q=80',
+        'image':
+            'https://images.unsplash.com/photo-1626544827763-d516dce335e2?w=400&auto=format&fit=crop&q=80',
       },
       {
         'name': 'Kuala Lumpur',
-        'image': 'https://images.unsplash.com/photo-1595818987173-903df56012aa?w=400&auto=format&fit=crop&q=80',
+        'image':
+            'https://images.unsplash.com/photo-1590001155093-a3c66ab0c3ff?w=400&auto=format&fit=crop&q=80',
       },
     ];
 
@@ -618,10 +639,7 @@ class WeekendTripsSection extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Chuyến đi cuối tuần',
-                style: AppTheme.sectionTitleStyle,
-              ),
+              Text('Chuyến đi cuối tuần', style: AppTheme.sectionTitleStyle),
               Text(
                 'Xem thêm',
                 style: TextStyle(
@@ -716,31 +734,40 @@ class PopularDestinationsSection extends StatelessWidget {
       future: DatabaseService().fetchPlaces(categoryName: 'Điểm đến'),
       builder: (context, snapshot) {
         final List<Map<String, dynamic>> destinations = snapshot.data ?? [];
-        if (snapshot.connectionState == ConnectionState.waiting && destinations.isEmpty) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            destinations.isEmpty) {
           return const SizedBox(
             height: 140,
-            child: Center(child: CircularProgressIndicator(color: AppTheme.primary)),
+            child: Center(
+              child: CircularProgressIndicator(color: AppTheme.primary),
+            ),
           );
         }
-        
-        final displayList = destinations.isNotEmpty ? destinations : [
-          {
-            'name': 'Đà Nẵng',
-            'image': 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&auto=format&fit=crop&q=80',
-          },
-          {
-            'name': 'Hội An',
-            'image': 'https://images.unsplash.com/photo-1528127269322-539801943592?w=400&auto=format&fit=crop&q=80',
-          },
-          {
-            'name': 'Nha Trang',
-            'image': 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&auto=format&fit=crop&q=80',
-          },
-          {
-            'name': 'Đà Lạt',
-            'image': 'https://images.unsplash.com/photo-1583244532610-2a234e7c3eca?w=400&auto=format&fit=crop&q=80',
-          },
-        ];
+
+        final displayList = destinations.isNotEmpty
+            ? destinations
+            : [
+                {
+                  'name': 'Đà Nẵng',
+                  'image':
+                      'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&auto=format&fit=crop&q=80',
+                },
+                {
+                  'name': 'Hội An',
+                  'image':
+                      'https://images.unsplash.com/photo-1528127269322-539801943592?w=400&auto=format&fit=crop&q=80',
+                },
+                {
+                  'name': 'Nha Trang',
+                  'image':
+                      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&auto=format&fit=crop&q=80',
+                },
+                {
+                  'name': 'Đà Lạt',
+                  'image':
+                      'https://images.unsplash.com/photo-1583244532610-2a234e7c3eca?w=400&auto=format&fit=crop&q=80',
+                },
+              ];
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -781,7 +808,9 @@ class PopularDestinationsSection extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         ClipRRect(
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(16),
+                          ),
                           child: Image.network(
                             dest['image'] ?? '',
                             height: 90,
@@ -791,7 +820,10 @@ class PopularDestinationsSection extends StatelessWidget {
                               return Container(
                                 height: 90,
                                 color: Colors.grey[200],
-                                child: const Icon(Icons.location_on, color: Colors.grey),
+                                child: const Icon(
+                                  Icons.location_on,
+                                  color: Colors.grey,
+                                ),
                               );
                             },
                           ),
@@ -956,19 +988,22 @@ class CreateMenuOverlay extends StatelessWidget {
         'title': 'Đà Lạt Mộng Mơ 3N2Đ',
         'mood': '🏖️ Thư giãn',
         'duration': '3 ngày',
-        'image': 'https://images.unsplash.com/photo-1583244532610-2a234e7c3eca?w=200&auto=format&fit=crop&q=80',
+        'image':
+            'https://images.unsplash.com/photo-1583244532610-2a234e7c3eca?w=200&auto=format&fit=crop&q=80',
       },
       {
         'title': 'Chinh Phục Mã Pí Lèng',
         'mood': '⛰️ Phiêu lưu',
         'duration': '4 ngày',
-        'image': 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200&auto=format&fit=crop&q=80',
+        'image':
+            'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200&auto=format&fit=crop&q=80',
       },
       {
         'title': 'Bản Đồ Food Tour Hội An',
         'mood': '🍲 Ẩm thực',
         'duration': '2 ngày',
-        'image': 'https://images.unsplash.com/photo-1528127269322-539801943592?w=200&auto=format&fit=crop&q=80',
+        'image':
+            'https://images.unsplash.com/photo-1528127269322-539801943592?w=200&auto=format&fit=crop&q=80',
       },
     ];
 
@@ -997,101 +1032,122 @@ class CreateMenuOverlay extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.of(context).pop(),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black12,
-                                blurRadius: 8,
-                                offset: Offset(0, 2),
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 12.0,
+                          ),
+                          child: Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () => Navigator.of(context).pop(),
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black12,
+                                        blurRadius: 8,
+                                        offset: Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.close_rounded,
+                                    color: AppTheme.darkText,
+                                    size: 20,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
-                          child: const Icon(
-                            Icons.close_rounded,
-                            color: AppTheme.darkText,
-                            size: 20,
+                        ),
+                        const SizedBox(height: 20),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 24.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'BẮT ĐẦU TRẢI NGHIỆM MỚI',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppTheme.primary,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                              SizedBox(height: 6),
+                              Text(
+                                'Hôm nay bạn muốn bắt đầu điều gì?',
+                                style: AppTheme.screenTitleStyle,
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'BẮT ĐẦU TRẢI NGHIỆM MỚI',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          color: AppTheme.primary,
-                          letterSpacing: 1.5,
+                        const SizedBox(height: 24),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                          child: Column(
+                            children: [
+                              _buildOverlayCard(
+                                context: context,
+                                icon: Icons.luggage_rounded,
+                                iconColor: AppTheme.primary,
+                                iconBgColor: AppTheme.primaryPeach,
+                                title: 'Lên kế hoạch chuyến đi',
+                                subtitle:
+                                    'Tạo hành trình thông minh, tự động sắp xếp theo sở thích và tâm trạng của riêng bạn.',
+                                actionText: 'Tạo kế hoạch',
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  _showCreateItinerarySheet(context);
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              _buildOverlayCard(
+                                context: context,
+                                icon: Icons.explore_rounded,
+                                iconColor: AppTheme.green,
+                                iconBgColor: AppTheme.lightGreen,
+                                title: 'Viết hướng dẫn du lịch',
+                                subtitle:
+                                    'Chia sẻ các địa điểm ăn chơi ẩn mình, cẩm nang chi tiết và mẹo hay cho những lữ khách khác.',
+                                actionText: 'Viết cẩm nang',
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Mở màn hình soạn thảo bài viết cẩm nang du lịch...',
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      SizedBox(height: 6),
-                      Text(
-                        'Hôm nay bạn muốn bắt đầu điều gì?',
-                        style: AppTheme.screenTitleStyle,
-                      ),
-                    ],
+                        const SizedBox(height: 24),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Column(
-                    children: [
-                      _buildOverlayCard(
-                        context: context,
-                        icon: Icons.luggage_rounded,
-                        iconColor: AppTheme.primary,
-                        iconBgColor: AppTheme.primaryPeach,
-                        title: 'Lên kế hoạch chuyến đi',
-                        subtitle: 'Tạo hành trình thông minh, tự động sắp xếp theo sở thích và tâm trạng của riêng bạn.',
-                        actionText: 'Tạo kế hoạch',
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          _showCreateItinerarySheet(context);
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      _buildOverlayCard(
-                        context: context,
-                        icon: Icons.explore_rounded,
-                        iconColor: AppTheme.green,
-                        iconBgColor: AppTheme.lightGreen,
-                        title: 'Viết hướng dẫn du lịch',
-                        subtitle: 'Chia sẻ các địa điểm ăn chơi ẩn mình, cẩm nang chi tiết và mẹo hay cho những lữ khách khác.',
-                        actionText: 'Viết cẩm nang',
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Mở màn hình soạn thảo bài viết cẩm nang du lịch...')),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 24),
                   decoration: BoxDecoration(
                     color: Colors.white.withAlpha(180),
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(32),
+                    ),
                     border: Border.all(
                       color: Colors.white.withAlpha(150),
                       width: 1.5,
@@ -1104,11 +1160,7 @@ class CreateMenuOverlay extends StatelessWidget {
                         padding: EdgeInsets.symmetric(horizontal: 24.0),
                         child: Row(
                           children: [
-                            Icon(
-                              Icons.bolt,
-                              color: AppTheme.amber,
-                              size: 18,
-                            ),
+                            Icon(Icons.bolt, color: AppTheme.amber, size: 18),
                             SizedBox(width: 4),
                             Text(
                               'Hoặc bắt đầu nhanh với mẫu có sẵn:',
@@ -1135,7 +1187,11 @@ class CreateMenuOverlay extends StatelessWidget {
                               onTap: () {
                                 Navigator.of(context).pop();
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Đang tải mẫu lịch trình: ${tmpl['title']}')),
+                                  SnackBar(
+                                    content: Text(
+                                      'Đang tải mẫu lịch trình: ${tmpl['title']}',
+                                    ),
+                                  ),
                                 );
                               },
                               child: Container(
@@ -1152,7 +1208,10 @@ class CreateMenuOverlay extends StatelessWidget {
                                       offset: const Offset(0, 2),
                                     ),
                                   ],
-                                  border: Border.all(color: AppTheme.border, width: 1),
+                                  border: Border.all(
+                                    color: AppTheme.border,
+                                    width: 1,
+                                  ),
                                 ),
                                 child: Row(
                                   children: [
@@ -1163,15 +1222,21 @@ class CreateMenuOverlay extends StatelessWidget {
                                         width: 56,
                                         height: 79,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) =>
-                                            Container(width: 56, color: Colors.grey[200]),
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                Container(
+                                                  width: 56,
+                                                  color: Colors.grey[200],
+                                                ),
                                       ),
                                     ),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             tmpl['title']!,
@@ -1187,14 +1252,21 @@ class CreateMenuOverlay extends StatelessWidget {
                                           Row(
                                             children: [
                                               Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2,
+                                                    ),
                                                 decoration: BoxDecoration(
                                                   color: AppTheme.lightGray,
-                                                  borderRadius: BorderRadius.circular(6),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
                                                 ),
                                                 child: Text(
                                                   tmpl['mood']!,
-                                                  style: const TextStyle(fontSize: 9),
+                                                  style: const TextStyle(
+                                                    fontSize: 9,
+                                                  ),
                                                 ),
                                               ),
                                               const SizedBox(width: 6),
@@ -1240,170 +1312,12 @@ class CreateMenuOverlay extends StatelessWidget {
       return;
     }
 
-    final titleController = TextEditingController();
-    final daysController = TextEditingController(text: '3');
-    final budgetController = TextEditingController(text: '3000000');
-    DateTime selectedDate = DateTime.now();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-                left: 24,
-                right: 24,
-                top: 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Tạo hành trình mới',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.darkText),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  TextField(
-                    controller: titleController,
-                    decoration: AppTheme.inputDecoration(
-                      hintText: 'Tên chuyến đi (ví dụ: Khám phá Phú Quốc)',
-                      prefixIcon: Icons.title_rounded,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  GestureDetector(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                        lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
-                      );
-                      if (picked != null) {
-                        setModalState(() {
-                          selectedDate = picked;
-                        });
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppTheme.border),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.calendar_month_rounded, color: AppTheme.subtitleText),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Khởi hành: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                            style: const TextStyle(fontSize: 14, color: AppTheme.darkText),
-                          ),
-                          const Spacer(),
-                          const Icon(Icons.arrow_drop_down, color: AppTheme.subtitleText),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: daysController,
-                          keyboardType: TextInputType.number,
-                          decoration: AppTheme.inputDecoration(
-                            hintText: 'Số ngày',
-                            prefixIcon: Icons.today_rounded,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: budgetController,
-                          keyboardType: TextInputType.number,
-                          decoration: AppTheme.inputDecoration(
-                            hintText: 'Ngân sách (đ)',
-                            prefixIcon: Icons.monetization_on_rounded,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      onPressed: () async {
-                        final title = titleController.text.trim();
-                        if (title.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Vui lòng nhập tên chuyến đi!')),
-                          );
-                          return;
-                        }
-                        
-                        final days = int.tryParse(daysController.text) ?? 3;
-                        final budget = int.tryParse(budgetController.text) ?? 1000000;
-                        
-                        final result = await DatabaseService().createUserItinerary(
-                          userId: user.id,
-                          title: title,
-                          startDate: selectedDate,
-                          days: days,
-                          budget: budget,
-                        );
-                        
-                        if (context.mounted) {
-                          Navigator.of(context).pop();
-                          if (result != null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Đã thêm hành trình mới thành công!'),
-                                backgroundColor: AppTheme.green,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                      child: const Text('Lưu hành trình', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
-              ),
-            );
-          },
-        );
+        return CreateItineraryWizardSheet(userId: user.id);
       },
     );
   }

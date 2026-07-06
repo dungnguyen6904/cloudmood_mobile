@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../models/user.dart';
 import 'login_screen.dart';
+import 'create_itinerary_wizard_sheet.dart';
 
 class CloudmoodProfileScreen extends StatefulWidget {
   const CloudmoodProfileScreen({super.key});
@@ -12,7 +13,8 @@ class CloudmoodProfileScreen extends StatefulWidget {
   State<CloudmoodProfileScreen> createState() => _CloudmoodProfileScreenState();
 }
 
-class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with SingleTickerProviderStateMixin {
+class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final AuthService _authService = AuthService();
 
@@ -43,7 +45,11 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
   }
 
   // Opens Edit Profile Bottom Sheet
-  void _showEditProfileSheet(BuildContext context, String currentName, String currentAvatar) {
+  void _showEditProfileSheet(
+    BuildContext context,
+    String currentName,
+    String currentAvatar,
+  ) {
     final nameController = TextEditingController(text: currentName);
     String selectedAvatar = currentAvatar;
 
@@ -73,7 +79,11 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
                     children: [
                       const Text(
                         'Chỉnh sửa hồ sơ',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.darkText),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.darkText,
+                        ),
                       ),
                       IconButton(
                         icon: const Icon(Icons.close_rounded),
@@ -82,7 +92,7 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
                     ],
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Text input for Name
                   TextField(
                     controller: nameController,
@@ -92,24 +102,29 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
                     ),
                   ),
                   const SizedBox(height: 20),
-                  
+
                   // Selected avatar view & header
                   const Text(
                     'Chọn ảnh đại diện mẫu:',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.darkText),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: AppTheme.darkText,
+                    ),
                   ),
                   const SizedBox(height: 12),
-                  
+
                   // Grid of preset avatars
                   SizedBox(
                     height: 140,
                     child: GridView.builder(
                       physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 6,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 6,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
                       itemCount: _avatarPresets.length,
                       itemBuilder: (context, index) {
                         final avatarUrl = _avatarPresets[index];
@@ -124,7 +139,9 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: isSelected ? AppTheme.primary : Colors.transparent,
+                                color: isSelected
+                                    ? AppTheme.primary
+                                    : Colors.transparent,
                                 width: 2.5,
                               ),
                             ),
@@ -141,7 +158,7 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
                     ),
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // Save Button
                   SizedBox(
                     width: double.infinity,
@@ -150,7 +167,9 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.primary,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                       ),
                       onPressed: () async {
                         final updated = await _authService.updateProfile(
@@ -162,14 +181,19 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
                           if (updated) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Hồ sơ đã được cập nhật thành công!'),
+                                content: Text(
+                                  'Hồ sơ đã được cập nhật thành công!',
+                                ),
                                 backgroundColor: AppTheme.green,
                               ),
                             );
                           }
                         }
                       },
-                      child: const Text('Lưu thay đổi', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: const Text(
+                        'Lưu thay đổi',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -194,10 +218,15 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
       builder: (context) {
         return AlertDialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: const Text(
             'Đổi mật khẩu',
-            style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.darkText),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppTheme.darkText,
+            ),
           ),
           content: Form(
             key: formKey,
@@ -212,7 +241,9 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
                       hintText: 'Mật khẩu hiện tại',
                       prefixIcon: Icons.lock_open_rounded,
                     ),
-                    validator: (v) => v == null || v.isEmpty ? 'Nhập mật khẩu hiện tại.' : null,
+                    validator: (v) => v == null || v.isEmpty
+                        ? 'Nhập mật khẩu hiện tại.'
+                        : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -224,7 +255,8 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
                     ),
                     validator: (v) {
                       if (v == null || v.isEmpty) return 'Nhập mật khẩu mới.';
-                      if (v.length < 6) return 'Mật khẩu mới ít nhất từ 6 kí tự.';
+                      if (v.length < 6)
+                        return 'Mật khẩu mới ít nhất từ 6 kí tự.';
                       return null;
                     },
                   ),
@@ -237,8 +269,10 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
                       prefixIcon: Icons.lock_rounded,
                     ),
                     validator: (v) {
-                      if (v == null || v.isEmpty) return 'Xác nhận mật khẩu mới.';
-                      if (v != newPasswordController.text) return 'Mật khẩu mới không khớp.';
+                      if (v == null || v.isEmpty)
+                        return 'Xác nhận mật khẩu mới.';
+                      if (v != newPasswordController.text)
+                        return 'Mật khẩu mới không khớp.';
                       return null;
                     },
                   ),
@@ -249,31 +283,42 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Hủy', style: TextStyle(color: AppTheme.subtitleText)),
+              child: const Text(
+                'Hủy',
+                style: TextStyle(color: AppTheme.subtitleText),
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               onPressed: () async {
                 if (!formKey.currentState!.validate()) return;
-                
+
                 final result = await _authService.changePassword(
                   currentPassword: currentPasswordController.text,
                   newPassword: newPasswordController.text,
                 );
-                
+
                 if (context.mounted) {
                   Navigator.of(context).pop();
                   if (result['success'] as bool) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(result['message'] as String), backgroundColor: AppTheme.green),
+                      SnackBar(
+                        content: Text(result['message'] as String),
+                        backgroundColor: AppTheme.green,
+                      ),
                     );
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(result['message'] as String), backgroundColor: Colors.redAccent),
+                      SnackBar(
+                        content: Text(result['message'] as String),
+                        backgroundColor: Colors.redAccent,
+                      ),
                     );
                   }
                 }
@@ -293,25 +338,40 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
       builder: (context) {
         return AlertDialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('Đăng xuất', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: const Text('Bạn có chắc chắn muốn đăng xuất khỏi tài khoản Cloudmood?'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            'Đăng xuất',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: const Text(
+            'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản Cloudmood?',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Hủy', style: TextStyle(color: AppTheme.subtitleText)),
+              child: const Text(
+                'Hủy',
+                style: TextStyle(color: AppTheme.subtitleText),
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.redAccent,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               onPressed: () {
                 _authService.logout();
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Đã đăng xuất thành công!'), backgroundColor: AppTheme.primary),
+                  const SnackBar(
+                    content: Text('Đã đăng xuất thành công!'),
+                    backgroundColor: AppTheme.primary,
+                  ),
                 );
               },
               child: const Text('Đăng xuất'),
@@ -354,8 +414,11 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
               Image.asset(
                 'assets/images/logo-cloudmood.png',
                 height: 70,
-                errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.cloud_rounded, size: 70, color: AppTheme.primary),
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.cloud_rounded,
+                  size: 70,
+                  color: AppTheme.primary,
+                ),
               ),
               const SizedBox(height: 12),
               const Text('cloudmood', style: AppTheme.brandLogoStyle),
@@ -379,13 +442,17 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     elevation: 2,
                     shadowColor: AppTheme.primary.withAlpha(80),
                   ),
                   onPressed: () {
                     Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const CloudmoodLoginScreen()),
+                      MaterialPageRoute(
+                        builder: (context) => const CloudmoodLoginScreen(),
+                      ),
                     );
                   },
                   child: const Text(
@@ -400,16 +467,24 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen> with Si
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('Chưa có tài khoản? ', style: TextStyle(color: AppTheme.subtitleText)),
+                  const Text(
+                    'Chưa có tài khoản? ',
+                    style: TextStyle(color: AppTheme.subtitleText),
+                  ),
                   GestureDetector(
                     onTap: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(builder: (context) => const CloudmoodLoginScreen()),
+                        MaterialPageRoute(
+                          builder: (context) => const CloudmoodLoginScreen(),
+                        ),
                       );
                     },
                     child: const Text(
                       'Đăng ký ngay',
-                      style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: AppTheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
@@ -441,7 +516,8 @@ class ProfileDashboard extends StatefulWidget {
   State<ProfileDashboard> createState() => _ProfileDashboardState();
 }
 
-class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerProviderStateMixin {
+class _ProfileDashboardState extends State<ProfileDashboard>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<Map<String, dynamic>> _itineraries = [];
   List<Map<String, dynamic>> _reviews = [];
@@ -469,10 +545,12 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
   Future<void> _loadData() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
-    
-    final itineraries = await DatabaseService().fetchUserItineraries(widget.user.id);
+
+    final itineraries = await DatabaseService().fetchUserItineraries(
+      widget.user.id,
+    );
     final reviews = await DatabaseService().fetchUserReviews(widget.user.id);
-    
+
     if (!mounted) return;
     setState(() {
       _itineraries = itineraries;
@@ -507,170 +585,12 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
 
   // Show Bottom Sheet to Create Itinerary
   void _showCreateItinerarySheet(BuildContext context) {
-    final titleController = TextEditingController();
-    final daysController = TextEditingController(text: '3');
-    final budgetController = TextEditingController(text: '3000000');
-    DateTime selectedDate = DateTime.now();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-                left: 24,
-                right: 24,
-                top: 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Tạo hành trình mới',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.darkText),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  TextField(
-                    controller: titleController,
-                    decoration: AppTheme.inputDecoration(
-                      hintText: 'Tên chuyến đi (ví dụ: Khám phá Phú Quốc)',
-                      prefixIcon: Icons.title_rounded,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  GestureDetector(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                        lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
-                      );
-                      if (picked != null) {
-                        setModalState(() {
-                          selectedDate = picked;
-                        });
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppTheme.border),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.calendar_month_rounded, color: AppTheme.subtitleText),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Khởi hành: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                            style: const TextStyle(fontSize: 14, color: AppTheme.darkText),
-                          ),
-                          const Spacer(),
-                          const Icon(Icons.arrow_drop_down, color: AppTheme.subtitleText),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: daysController,
-                          keyboardType: TextInputType.number,
-                          decoration: AppTheme.inputDecoration(
-                            hintText: 'Số ngày',
-                            prefixIcon: Icons.today_rounded,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: budgetController,
-                          keyboardType: TextInputType.number,
-                          decoration: AppTheme.inputDecoration(
-                            hintText: 'Ngân sách (đ)',
-                            prefixIcon: Icons.monetization_on_rounded,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      onPressed: () async {
-                        final title = titleController.text.trim();
-                        if (title.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Vui lòng nhập tên chuyến đi!')),
-                          );
-                          return;
-                        }
-                        
-                        final days = int.tryParse(daysController.text) ?? 3;
-                        final budget = int.tryParse(budgetController.text) ?? 1000000;
-                        
-                        final result = await DatabaseService().createUserItinerary(
-                          userId: widget.user.id,
-                          title: title,
-                          startDate: selectedDate,
-                          days: days,
-                          budget: budget,
-                        );
-                        
-                        if (context.mounted) {
-                          Navigator.of(context).pop();
-                          if (result != null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Đã thêm hành trình mới thành công!'),
-                                backgroundColor: AppTheme.green,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                      child: const Text('Lưu hành trình', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
-              ),
-            );
-          },
-        );
+        return CreateItineraryWizardSheet(userId: widget.user.id);
       },
     );
   }
@@ -681,9 +601,17 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
     int fullStars = rating.floor();
     for (int i = 0; i < 5; i++) {
       if (i < fullStars) {
-        stars.add(const Icon(Icons.star_rounded, color: AppTheme.amber, size: 16));
+        stars.add(
+          const Icon(Icons.star_rounded, color: AppTheme.amber, size: 16),
+        );
       } else {
-        stars.add(const Icon(Icons.star_border_rounded, color: AppTheme.border, size: 16));
+        stars.add(
+          const Icon(
+            Icons.star_border_rounded,
+            color: AppTheme.border,
+            size: 16,
+          ),
+        );
       }
     }
     return Row(children: stars);
@@ -691,8 +619,11 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
-    final String joinDate = '${widget.user.createdAt.day}/${widget.user.createdAt.month}/${widget.user.createdAt.year}';
-    final String roleText = widget.user.role ? 'Quản trị viên' : 'Thành viên PRO';
+    final String joinDate =
+        '${widget.user.createdAt.day}/${widget.user.createdAt.month}/${widget.user.createdAt.year}';
+    final String roleText = widget.user.role
+        ? 'Quản trị viên'
+        : 'Thành viên PRO';
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -709,10 +640,21 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Hồ sơ cá nhân', style: AppTheme.sectionTitleStyle),
+                          const Text(
+                            'Hồ sơ cá nhân',
+                            style: AppTheme.sectionTitleStyle,
+                          ),
                           IconButton(
-                            icon: const Icon(Icons.edit_note_rounded, color: AppTheme.primary, size: 28),
-                            onPressed: () => widget.onEditProfile(context, widget.user.fullName, widget.user.avatar ?? ''),
+                            icon: const Icon(
+                              Icons.edit_note_rounded,
+                              color: AppTheme.primary,
+                              size: 28,
+                            ),
+                            onPressed: () => widget.onEditProfile(
+                              context,
+                              widget.user.fullName,
+                              widget.user.avatar ?? '',
+                            ),
                           ),
                         ],
                       ),
@@ -727,20 +669,34 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
                             Container(
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(color: AppTheme.primary.withAlpha(100), width: 2),
+                                border: Border.all(
+                                  color: AppTheme.primary.withAlpha(100),
+                                  width: 2,
+                                ),
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(40),
-                                child: widget.user.avatar != null && widget.user.avatar!.isNotEmpty
+                                child:
+                                    widget.user.avatar != null &&
+                                        widget.user.avatar!.isNotEmpty
                                     ? Image.network(
                                         widget.user.avatar!,
                                         width: 80,
                                         height: 80,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) =>
-                                            const Icon(Icons.person, size: 40, color: AppTheme.subtitleText),
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                const Icon(
+                                                  Icons.person,
+                                                  size: 40,
+                                                  color: AppTheme.subtitleText,
+                                                ),
                                       )
-                                    : const Icon(Icons.person, size: 40, color: AppTheme.subtitleText),
+                                    : const Icon(
+                                        Icons.person,
+                                        size: 40,
+                                        color: AppTheme.subtitleText,
+                                      ),
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -757,17 +713,30 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(widget.user.email, style: const TextStyle(fontSize: 13, color: AppTheme.subtitleText)),
+                                  Text(
+                                    widget.user.email,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: AppTheme.subtitleText,
+                                    ),
+                                  ),
                                   const SizedBox(height: 8),
                                   Row(
                                     children: [
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: AppTheme.primaryPeach,
-                                          borderRadius: BorderRadius.circular(8),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                           border: Border.all(
-                                            color: AppTheme.primary.withAlpha(80),
+                                            color: AppTheme.primary.withAlpha(
+                                              80,
+                                            ),
                                             width: 0.5,
                                           ),
                                         ),
@@ -783,7 +752,10 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
                                       const SizedBox(width: 8),
                                       Text(
                                         'ID: #${widget.user.id} · $joinDate',
-                                        style: const TextStyle(fontSize: 11, color: AppTheme.subtitleText),
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppTheme.subtitleText,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -797,13 +769,18 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
 
                       // Dynamic Database Statistics
                       Container(
-                        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 16,
+                          horizontal: 10,
+                        ),
                         decoration: AppTheme.premiumCardDecoration(),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
                             _ProfileStatWidget(
-                              count: _isLoading ? '...' : '${_itineraries.length}',
+                              count: _isLoading
+                                  ? '...'
+                                  : '${_itineraries.length}',
                               label: 'Chuyến đi',
                             ),
                             _ProfileStatWidget(
@@ -811,7 +788,9 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
                               label: 'Đánh giá',
                             ),
                             _ProfileStatWidget(
-                              count: _isLoading ? '...' : _formatBudget(_totalBudget),
+                              count: _isLoading
+                                  ? '...'
+                                  : _formatBudget(_totalBudget),
                               label: 'Tổng ngân sách',
                             ),
                           ],
@@ -858,41 +837,62 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
   // TAB 1: ITINERARIES FROM DB
   Widget _buildItinerariesTab() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.primary),
+      );
     }
-    
+
     if (_itineraries.isEmpty) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.luggage_outlined, size: 64, color: AppTheme.primary.withAlpha(120)),
-              const SizedBox(height: 12),
-              const Text(
-                'Chưa có hành trình nào',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.darkText),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Hãy bắt đầu kỳ nghỉ tuyệt vời của bạn bằng cách thêm một chuyến đi mới ngay hôm nay!',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: AppTheme.subtitleText),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.luggage_outlined,
+                  size: 64,
+                  color: AppTheme.primary.withAlpha(120),
                 ),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Tạo chuyến đi đầu tiên', style: TextStyle(fontWeight: FontWeight.bold)),
-                onPressed: () => _showCreateItinerarySheet(context),
-              ),
-            ],
+                const SizedBox(height: 12),
+                const Text(
+                  'Chưa có hành trình nào',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: AppTheme.darkText,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Hãy bắt đầu kỳ nghỉ tuyệt vời của bạn bằng cách thêm một chuyến đi mới ngay hôm nay!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: AppTheme.subtitleText),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                  ),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text(
+                    'Tạo chuyến đi đầu tiên',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () => _showCreateItinerarySheet(context),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -904,8 +904,10 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
       itemCount: _itineraries.length,
       itemBuilder: (context, index) {
         final item = _itineraries[index];
-        final budgetFormatted = _formatBudget((item['budget'] as num?)?.toInt() ?? 0);
-        
+        final budgetFormatted = _formatBudget(
+          (item['budget'] as num?)?.toInt() ?? 0,
+        );
+
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(12),
@@ -928,29 +930,47 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
                   children: [
                     Text(
                       item['title'] ?? 'Chuyến đi không tên',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.darkText),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: AppTheme.darkText,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '${item['days']} ngày · Bắt đầu: ${item['startDate']}',
-                      style: const TextStyle(fontSize: 11, color: AppTheme.subtitleText),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.subtitleText,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: AppTheme.primaryPeach,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         'Chi phí: $budgetFormatted',
-                        style: const TextStyle(fontSize: 10, color: AppTheme.primary, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppTheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.black26),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: Colors.black26,
+              ),
             ],
           ),
         );
@@ -961,29 +981,42 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
   // TAB 2: REVIEWS FROM DB
   Widget _buildReviewsTab() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.primary),
+      );
     }
-    
+
     if (_reviews.isEmpty) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.rate_review_outlined, size: 64, color: AppTheme.primary.withAlpha(120)),
-              const SizedBox(height: 12),
-              const Text(
-                'Chưa có đánh giá nào',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.darkText),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Ghé thăm mục Khách sạn hoặc gợi ý để viết những dòng đánh giá trải nghiệm đầu tiên!',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: AppTheme.subtitleText),
-              ),
-            ],
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.rate_review_outlined,
+                  size: 64,
+                  color: AppTheme.primary.withAlpha(120),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Chưa có đánh giá nào',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: AppTheme.darkText,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Ghé thăm mục Khách sạn hoặc gợi ý để viết những dòng đánh giá trải nghiệm đầu tiên!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: AppTheme.subtitleText),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -996,8 +1029,12 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
       itemBuilder: (context, index) {
         final item = _reviews[index];
         final place = item['Place'] as Map<String, dynamic>?;
-        final placeName = place != null ? place['name'] as String : 'Địa điểm du lịch';
-        final placeImage = place != null ? place['image'] as String : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=200';
+        final placeName = place != null
+            ? place['name'] as String
+            : 'Địa điểm du lịch';
+        final placeImage = place != null
+            ? place['image'] as String
+            : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=200';
         final rating = (item['rating'] as num?)?.toDouble() ?? 5.0;
 
         return Container(
@@ -1014,7 +1051,8 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
                   width: 70,
                   height: 70,
                   fit: BoxFit.cover,
-                  errorBuilder: (c, e, s) => Container(width: 70, height: 70, color: Colors.grey[200]),
+                  errorBuilder: (c, e, s) =>
+                      Container(width: 70, height: 70, color: Colors.grey[200]),
                 ),
               ),
               const SizedBox(width: 14),
@@ -1024,7 +1062,11 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
                   children: [
                     Text(
                       placeName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.darkText),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: AppTheme.darkText,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     _buildStarRating(rating),
@@ -1033,12 +1075,19 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
                       item['comment'] ?? '',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: Colors.black87, fontStyle: FontStyle.italic),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black87,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Ngày đăng: ${item['publishedDate'] ?? ""}',
-                      style: const TextStyle(fontSize: 10, color: AppTheme.subtitleText),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppTheme.subtitleText,
+                      ),
                     ),
                   ],
                 ),
@@ -1059,7 +1108,12 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
         // Section: Account
         const Text(
           'TÀI KHOẢN',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.subtitleText, letterSpacing: 1),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.subtitleText,
+            letterSpacing: 1,
+          ),
         ),
         const SizedBox(height: 8),
         Container(
@@ -1095,7 +1149,12 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
         // Section: System Preference
         const Text(
           'TÙY CHỌN HỆ THỐNG',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.subtitleText, letterSpacing: 1),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.subtitleText,
+            letterSpacing: 1,
+          ),
         ),
         const SizedBox(height: 8),
         Container(
@@ -1124,9 +1183,19 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
                 trailing: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('Tiếng Việt', style: TextStyle(fontSize: 13, color: AppTheme.subtitleText)),
+                    Text(
+                      'Tiếng Việt',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.subtitleText,
+                      ),
+                    ),
                     SizedBox(width: 4),
-                    Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Colors.black26),
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 12,
+                      color: Colors.black26,
+                    ),
                   ],
                 ),
               ),
@@ -1179,7 +1248,13 @@ class _ProfileDashboardState extends State<ProfileDashboard> with SingleTickerPr
             color: titleColor,
           ),
         ),
-        trailing: trailing ?? const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.black26),
+        trailing:
+            trailing ??
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 14,
+              color: Colors.black26,
+            ),
       ),
     );
   }
@@ -1230,11 +1305,12 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   double get maxExtent => tabBar.preferredSize.height;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
-      color: AppTheme.background,
-      child: tabBar,
-    );
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Container(color: AppTheme.background, child: tabBar);
   }
 
   @override

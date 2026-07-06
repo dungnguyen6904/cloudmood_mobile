@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -13,7 +14,13 @@ class DatabaseService {
   /// Checks if categories and places are empty in the database, and if so, seeds them with default data
   Future<void> checkAndSeedData() async {
     try {
-      final categoryCheck = await _supabase.from('Category').select('id').limit(1);
+      // Create a temporary SupabaseClient with the service_role key to bypass RLS policies during seeding
+      final seedClient = SupabaseClient(
+        'https://mrulzaiktzljosdgfivt.supabase.co',
+        dotenv.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '',
+      );
+
+      final categoryCheck = await seedClient.from('Category').select('id').limit(1);
       if (categoryCheck.isEmpty) {
         debugPrint('Seeding categories...');
         
@@ -25,7 +32,7 @@ class DatabaseService {
           {'name': 'Cẩm nang'},
         ];
         
-        final categoryInsert = await _supabase.from('Category').insert(categories).select();
+        final categoryInsert = await seedClient.from('Category').insert(categories).select();
         debugPrint('Categories seeded: $categoryInsert');
 
         // Extract IDs based on name
@@ -192,7 +199,7 @@ class DatabaseService {
           }
         ];
         
-        await _supabase.from('Place').insert(places);
+        await seedClient.from('Place').insert(places);
         debugPrint('Places seeded successfully.');
       }
     } catch (e) {
@@ -248,16 +255,26 @@ class DatabaseService {
   Future<Map<String, dynamic>?> createUserItinerary({
     required int userId,
     required String title,
+    required String destination,
     required DateTime startDate,
     required int days,
     required int budget,
+    required String companion,
+    required String pace,
+    required List<String> categories,
+    required List<String> amenities,
   }) async {
     try {
       final data = {
         'title': title,
+        'destination': destination,
         'startDate': startDate.toIso8601String().substring(0, 10),
         'days': days,
         'budget': budget,
+        'companion': companion,
+        'pace': pace,
+        'categories': categories,
+        'amenities': amenities,
         'userId': userId,
       };
       
@@ -322,6 +339,34 @@ class DatabaseService {
     } catch (e) {
       debugPrint('Error creating place review: $e');
       return null;
+    }
+  }
+
+  /// Checks if a destination city is supported (i.e. has places in the database matching it)
+  Future<bool> isDestinationSupported(String cityName) async {
+    try {
+      // Search for places where address contains cityName (case-insensitive)
+      final response = await _supabase
+          .from('Place')
+          .select('id')
+          .ilike('address', '%$cityName%')
+          .limit(1);
+          
+      if (response.isNotEmpty) {
+        return true;
+      }
+      
+      // Try to check name as fallback
+      final responseName = await _supabase
+          .from('Place')
+          .select('id')
+          .ilike('name', '%$cityName%')
+          .limit(1);
+          
+      return responseName.isNotEmpty;
+    } catch (e) {
+      debugPrint('Error checking destination support: $e');
+      return false;
     }
   }
 }

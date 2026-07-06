@@ -14,7 +14,7 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  
+
   bool _obscurePassword = true;
   bool _rememberMe = false;
   bool _isLoading = false;
@@ -87,10 +87,15 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
       builder: (context) {
         return AlertDialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: const Text(
             'Khôi phục mật khẩu',
-            style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.darkText),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppTheme.darkText,
+            ),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -113,13 +118,18 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Hủy', style: TextStyle(color: AppTheme.subtitleText)),
+              child: const Text(
+                'Hủy',
+                style: TextStyle(color: AppTheme.subtitleText),
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               onPressed: () {
                 final email = emailForgotController.text.trim();
@@ -127,7 +137,9 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
                 if (email.isNotEmpty && email.contains('@')) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Yêu cầu khôi phục mật khẩu đã được gửi đến $email'),
+                      content: Text(
+                        'Yêu cầu khôi phục mật khẩu đã được gửi đến $email',
+                      ),
                       backgroundColor: AppTheme.green,
                     ),
                   );
@@ -156,7 +168,11 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.darkText, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppTheme.darkText,
+            size: 20,
+          ),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -174,15 +190,21 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
                   Image.asset(
                     'assets/images/logo-cloudmood.png',
                     height: 60,
-                    errorBuilder: (context, error, stackTrace) =>
-                        const Icon(Icons.cloud_rounded, size: 60, color: AppTheme.primary),
+                    errorBuilder: (context, error, stackTrace) => const Icon(
+                      Icons.cloud_rounded,
+                      size: 60,
+                      color: AppTheme.primary,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   const Text('cloudmood', style: AppTheme.brandLogoStyle),
                   const SizedBox(height: 8),
                   const Text(
                     'Lên lịch trình, trọn vẹn cảm xúc',
-                    style: TextStyle(color: AppTheme.subtitleText, fontSize: 14),
+                    style: TextStyle(
+                      color: AppTheme.subtitleText,
+                      fontSize: 14,
+                    ),
                   ),
                   const SizedBox(height: 36),
 
@@ -195,10 +217,14 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
                       children: [
                         const Text(
                           'Đăng nhập tài khoản',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.darkText),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.darkText,
+                          ),
                         ),
                         const SizedBox(height: 20),
-                        
+
                         // Email field
                         TextFormField(
                           controller: _emailController,
@@ -232,7 +258,9 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
                             prefixIcon: Icons.lock_rounded,
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                                _obscurePassword
+                                    ? Icons.visibility_off_rounded
+                                    : Icons.visibility_rounded,
                                 color: AppTheme.subtitleText,
                               ),
                               onPressed: () {
@@ -263,7 +291,9 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
                                   child: Checkbox(
                                     value: _rememberMe,
                                     activeColor: AppTheme.primary,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
                                     onChanged: (value) {
                                       setState(() {
                                         _rememberMe = value ?? false;
@@ -274,7 +304,11 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
                                 const SizedBox(width: 6),
                                 const Text(
                                   'Ghi nhớ tôi',
-                                  style: TextStyle(fontSize: 13, color: AppTheme.darkText, fontWeight: FontWeight.w500),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppTheme.darkText,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ],
                             ),
@@ -301,7 +335,9 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppTheme.primary,
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
                               elevation: 2,
                               shadowColor: AppTheme.primary.withAlpha(80),
                             ),
@@ -310,11 +346,17 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
                                 ? const SizedBox(
                                     width: 24,
                                     height: 24,
-                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : const Text(
                                     'Đăng nhập',
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                           ),
                         ),
@@ -326,15 +368,23 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
                   // Divider
                   Row(
                     children: [
-                      Expanded(child: Divider(color: AppTheme.border, thickness: 1)),
+                      Expanded(
+                        child: Divider(color: AppTheme.border, thickness: 1),
+                      ),
                       const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 16.0),
                         child: Text(
                           'HOẶC',
-                          style: TextStyle(color: AppTheme.subtitleText, fontSize: 12, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            color: AppTheme.subtitleText,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                      Expanded(child: Divider(color: AppTheme.border, thickness: 1)),
+                      Expanded(
+                        child: Divider(color: AppTheme.border, thickness: 1),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -348,14 +398,19 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
                         backgroundColor: Colors.white,
                         foregroundColor: AppTheme.darkText,
                         side: const BorderSide(color: AppTheme.border),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                       ),
                       onPressed: _isGoogleLoading ? null : _handleGoogleSignIn,
                       child: _isGoogleLoading
                           ? const SizedBox(
                               width: 24,
                               height: 24,
-                              child: CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2),
+                              child: CircularProgressIndicator(
+                                color: AppTheme.primary,
+                                strokeWidth: 2,
+                              ),
                             )
                           : Row(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -365,12 +420,19 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
                                   'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1024px-Google_%22G%22_logo.svg.png',
                                   height: 20,
                                   errorBuilder: (context, error, stackTrace) =>
-                                      const Icon(Icons.g_mobiledata_rounded, color: Colors.blue, size: 24),
+                                      const Icon(
+                                        Icons.g_mobiledata_rounded,
+                                        color: Colors.blue,
+                                        size: 24,
+                                      ),
                                 ),
                                 const SizedBox(width: 12),
                                 const Text(
                                   'Đăng nhập bằng Google',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ],
                             ),
@@ -384,22 +446,38 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen> {
                     children: [
                       const Text(
                         'Chưa có tài khoản? ',
-                        style: TextStyle(color: AppTheme.subtitleText, fontSize: 14),
+                        style: TextStyle(
+                          color: AppTheme.subtitleText,
+                          fontSize: 14,
+                        ),
                       ),
                       GestureDetector(
                         onTap: () {
                           // Slide transition to register screen
                           Navigator.of(context).push(
                             PageRouteBuilder(
-                              pageBuilder: (context, animation, secondaryAnimation) =>
-                                  const CloudmoodRegisterScreen(),
-                              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                const begin = Offset(1.0, 0.0);
-                                const end = Offset.zero;
-                                const curve = Curves.easeInOutCubic;
-                                var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-                                return SlideTransition(position: animation.drive(tween), child: child);
-                              },
+                              pageBuilder:
+                                  (context, animation, secondaryAnimation) =>
+                                      const CloudmoodRegisterScreen(),
+                              transitionsBuilder:
+                                  (
+                                    context,
+                                    animation,
+                                    secondaryAnimation,
+                                    child,
+                                  ) {
+                                    const begin = Offset(1.0, 0.0);
+                                    const end = Offset.zero;
+                                    const curve = Curves.easeInOutCubic;
+                                    var tween = Tween(
+                                      begin: begin,
+                                      end: end,
+                                    ).chain(CurveTween(curve: curve));
+                                    return SlideTransition(
+                                      position: animation.drive(tween),
+                                      child: child,
+                                    );
+                                  },
                             ),
                           );
                         },
