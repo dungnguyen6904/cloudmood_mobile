@@ -1,11 +1,111 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../models/user.dart';
+import '../widgets/avatar_image.dart';
 import 'login_screen.dart';
 import 'create_itinerary_wizard_sheet.dart';
 import 'trip_overview_screen.dart';
+
+Future<XFile?> _selectImage(BuildContext context) async {
+  final source = await showModalBottomSheet<ImageSource>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      return Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Thay đổi ảnh đại diện',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.darkText,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.camera_alt_rounded,
+                  color: AppTheme.primary,
+                ),
+              ),
+              title: const Text(
+                'Chụp ảnh mới',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.darkText,
+                ),
+              ),
+              onTap: () => Navigator.of(context).pop(ImageSource.camera),
+            ),
+            const Divider(color: AppTheme.border, height: 1),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.lightAmber,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.photo_library_rounded,
+                  color: AppTheme.amber,
+                ),
+              ),
+              title: const Text(
+                'Chọn từ thư viện',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.darkText,
+                ),
+              ),
+              onTap: () => Navigator.of(context).pop(ImageSource.gallery),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      );
+    },
+  );
+
+  if (source != null) {
+    try {
+      return await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 400,
+        maxHeight: 400,
+        imageQuality: 70,
+      );
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+    }
+  }
+  return null;
+}
 
 class CloudmoodProfileScreen extends StatefulWidget {
   const CloudmoodProfileScreen({super.key});
@@ -19,19 +119,8 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
   late TabController _tabController;
   final AuthService _authService = AuthService();
 
-  // Settings mock states
   bool _notifEnabled = true;
   bool _darkModeEnabled = false;
-
-  // Preset avatar options for users to choose from
-  final List<String> _avatarPresets = [
-    'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80', // Guy
-    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80', // Girl
-    'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=200&auto=format&fit=crop&q=80', // Retro guy
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80', // Girl photographer
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80', // Beard man
-    'https://images.unsplash.com/photo-1607990283143-e81e7a2c93ab?w=200&auto=format&fit=crop&q=80', // Traveler guy
-  ];
 
   @override
   void initState() {
@@ -45,7 +134,6 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
     super.dispose();
   }
 
-  // Opens Edit Profile Bottom Sheet
   void _showEditProfileSheet(
     BuildContext context,
     String currentName,
@@ -57,122 +145,131 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-                left: 24,
-                right: 24,
-                top: 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Chỉnh sửa hồ sơ',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.darkText,
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+          ),
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom,
+                  left: 24,
+                  right: 24,
+                  top: 24,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Handle
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppTheme.border,
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Text input for Name
-                  TextField(
-                    controller: nameController,
-                    decoration: AppTheme.inputDecoration(
-                      hintText: 'Họ và tên',
-                      prefixIcon: Icons.person_rounded,
                     ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Selected avatar view & header
-                  const Text(
-                    'Chọn ảnh đại diện mẫu:',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: AppTheme.darkText,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Grid of preset avatars
-                  SizedBox(
-                    height: 140,
-                    child: GridView.builder(
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 6,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Chỉnh sửa hồ sơ',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.darkText,
                           ),
-                      itemCount: _avatarPresets.length,
-                      itemBuilder: (context, index) {
-                        final avatarUrl = _avatarPresets[index];
-                        final isSelected = selectedAvatar == avatarUrl;
-                        return GestureDetector(
-                          onTap: () {
-                            setModalState(() {
-                              selectedAvatar = avatarUrl;
-                            });
-                          },
+                        ),
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
                           child: Container(
+                            padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
+                              color: AppTheme.surfaceVariant,
                               shape: BoxShape.circle,
-                              border: Border.all(
-                                color: isSelected
-                                    ? AppTheme.primary
-                                    : Colors.transparent,
-                                width: 2.5,
-                              ),
                             ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(30),
-                              child: Image.network(
-                                avatarUrl,
-                                fit: BoxFit.cover,
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: AppTheme.subtitleText,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: nameController,
+                      decoration: AppTheme.inputDecoration(
+                        hintText: 'Họ và tên',
+                        prefixIcon: Icons.person_outline_rounded,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Ảnh đại diện',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: AppTheme.darkText,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Center(
+                      child: GestureDetector(
+                        onTap: () async {
+                          final pickedFile = await _selectImage(context);
+                          if (pickedFile != null) {
+                            final bytes = await pickedFile.readAsBytes();
+                            final base64String =
+                                'data:image/jpeg;base64,${base64Encode(bytes)}';
+                            setModalState(() {
+                              selectedAvatar = base64String;
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: AppTheme.primaryGradient,
+                          ),
+                          child: ClipOval(
+                            child: Container(
+                              width: 100,
+                              height: 100,
+                              color: AppTheme.surfaceVariant,
+                              child: AvatarImage(
+                                avatarUrl: selectedAvatar,
+                                size: 100,
                               ),
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Save Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      onPressed: () async {
+                    ),
+                    const SizedBox(height: 8),
+                    const Center(
+                      child: Text(
+                        'Nhấn vào ảnh để đổi ảnh đại diện từ thiết bị',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.subtitleText,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    GestureDetector(
+                      onTap: () async {
                         final updated = await _authService.updateProfile(
                           fullName: nameController.text.trim(),
                           avatarUrl: selectedAvatar,
@@ -182,32 +279,40 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
                           if (updated) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text(
-                                  'Hồ sơ đã được cập nhật thành công!',
-                                ),
+                                content: Text('Hồ sơ đã được cập nhật!'),
                                 backgroundColor: AppTheme.green,
                               ),
                             );
                           }
                         }
                       },
-                      child: const Text(
-                        'Lưu thay đổi',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      child: Container(
+                        height: 52,
+                        width: double.infinity,
+                        decoration: AppTheme.gradientButtonDecoration(),
+                        child: const Center(
+                          child: Text(
+                            'Lưu thay đổi',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
-              ),
-            );
-          },
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              );
+            },
+          ),
         );
       },
     );
   }
 
-  // Show Change Password Dialog
   void _showChangePasswordDialog() {
     final currentPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
@@ -220,14 +325,32 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
         return AlertDialog(
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(24),
           ),
-          title: const Text(
-            'Đổi mật khẩu',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppTheme.darkText,
-            ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.lock_reset_rounded,
+                  color: AppTheme.primary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Đổi mật khẩu',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                  color: AppTheme.darkText,
+                ),
+              ),
+            ],
           ),
           content: Form(
             key: formKey,
@@ -256,8 +379,7 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
                     ),
                     validator: (v) {
                       if (v == null || v.isEmpty) return 'Nhập mật khẩu mới.';
-                      if (v.length < 6)
-                        return 'Mật khẩu mới ít nhất từ 6 kí tự.';
+                      if (v.length < 6) return 'Ít nhất 6 ký tự.';
                       return null;
                     },
                   ),
@@ -270,10 +392,10 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
                       prefixIcon: Icons.lock_rounded,
                     ),
                     validator: (v) {
-                      if (v == null || v.isEmpty)
-                        return 'Xác nhận mật khẩu mới.';
-                      if (v != newPasswordController.text)
-                        return 'Mật khẩu mới không khớp.';
+                      if (v == null || v.isEmpty) return 'Xác nhận mật khẩu.';
+                      if (v != newPasswordController.text) {
+                        return 'Mật khẩu không khớp.';
+                      }
                       return null;
                     },
                   ),
@@ -289,39 +411,34 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
                 style: TextStyle(color: AppTheme.subtitleText),
               ),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
+            FilledButton(
+              style: FilledButton.styleFrom(
                 backgroundColor: AppTheme.primary,
-                foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
                 ),
               ),
               onPressed: () async {
                 if (!formKey.currentState!.validate()) return;
-
                 final result = await _authService.changePassword(
                   currentPassword: currentPasswordController.text,
                   newPassword: newPasswordController.text,
                 );
-
                 if (context.mounted) {
                   Navigator.of(context).pop();
-                  if (result['success'] as bool) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(result['message'] as String),
-                        backgroundColor: AppTheme.green,
-                      ),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(result['message'] as String),
-                        backgroundColor: Colors.redAccent,
-                      ),
-                    );
-                  }
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(result['message'] as String),
+                      backgroundColor: (result['success'] as bool)
+                          ? AppTheme.green
+                          : AppTheme.red,
+                    ),
+                  );
                 }
               },
               child: const Text('Đổi mật khẩu'),
@@ -332,7 +449,6 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
     );
   }
 
-  // Logout confirmation dialog
   void _showLogoutConfirmDialog() {
     showDialog(
       context: context,
@@ -340,14 +456,25 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
         return AlertDialog(
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(24),
           ),
-          title: const Text(
-            'Đăng xuất',
-            style: TextStyle(fontWeight: FontWeight.bold),
+          title: const Row(
+            children: [
+              Icon(Icons.logout_rounded, color: AppTheme.red, size: 22),
+              SizedBox(width: 10),
+              Text(
+                'Đăng xuất',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                  color: AppTheme.darkText,
+                ),
+              ),
+            ],
           ),
           content: const Text(
             'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản Cloudmood?',
+            style: TextStyle(color: AppTheme.bodyText),
           ),
           actions: [
             TextButton(
@@ -357,12 +484,16 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
                 style: TextStyle(color: AppTheme.subtitleText),
               ),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                foregroundColor: Colors.white,
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.red,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
                 ),
               ),
               onPressed: () {
@@ -389,10 +520,14 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
       valueListenable: _authService.currentUser,
       builder: (context, user, child) {
         if (user == null) {
-          return _buildGuestWelcomeScreen(context);
+          return _buildGuestScreen(context);
         }
         return ProfileDashboard(
           user: user,
+          notifEnabled: _notifEnabled,
+          darkModeEnabled: _darkModeEnabled,
+          onNotifChanged: (v) => setState(() => _notifEnabled = v),
+          onDarkModeChanged: (v) => setState(() => _darkModeEnabled = v),
           onEditProfile: _showEditProfileSheet,
           onChangePassword: _showChangePasswordDialog,
           onLogout: _showLogoutConfirmDialog,
@@ -401,106 +536,155 @@ class _CloudmoodProfileScreenState extends State<CloudmoodProfileScreen>
     );
   }
 
-  // 1. GUEST WELCOME SCREEN (When user is not logged in)
-  Widget _buildGuestWelcomeScreen(BuildContext context) {
+  // Guest welcome screen
+  Widget _buildGuestScreen(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Logo image
-              Image.asset(
-                'assets/images/logo-cloudmood.png',
-                height: 70,
-                errorBuilder: (context, error, stackTrace) => const Icon(
-                  Icons.cloud_rounded,
-                  size: 70,
-                  color: AppTheme.primary,
-                ),
+      body: Stack(
+        children: [
+          // Top gradient blob
+          Container(
+            height: 280,
+            decoration: const BoxDecoration(
+              gradient: AppTheme.heroGradient,
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(40),
+                bottomRight: Radius.circular(40),
               ),
-              const SizedBox(height: 12),
-              const Text('cloudmood', style: AppTheme.brandLogoStyle),
-              const SizedBox(height: 16),
-              const Text(
-                'Lưu giữ và chia sẻ hành trình du lịch của bạn. Khám phá các điểm đến được gợi ý tự động dựa trên tâm trạng.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppTheme.subtitleText,
-                  height: 1.45,
-                ),
-              ),
-              const SizedBox(height: 48),
-
-              // Sign In Button
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+            ),
+            child: Stack(
+              children: [
+                Positioned(
+                  top: -50,
+                  right: -60,
+                  child: Container(
+                    width: 200,
+                    height: 200,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withAlpha(15),
                     ),
-                    elevation: 2,
-                    shadowColor: AppTheme.primary.withAlpha(80),
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const CloudmoodLoginScreen(),
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    'Đăng nhập tài khoản',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-
-              // Sign Up / Browse as guest
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'Chưa có tài khoản? ',
-                    style: TextStyle(color: AppTheme.subtitleText),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => const CloudmoodLoginScreen(),
+                const SafeArea(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.person_rounded,
+                          size: 64,
+                          color: Colors.white54,
                         ),
-                      );
-                    },
-                    child: const Text(
-                      'Đăng ký ngay',
-                      style: TextStyle(
-                        color: AppTheme.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
+                        SizedBox(height: 12),
+                        Text(
+                          'Chưa đăng nhập',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
-        ),
+          // Content
+          SafeArea(
+            child: Column(
+              children: [
+                const SizedBox(height: 250),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 28),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'Lưu giữ và chia sẻ hành trình du lịch của bạn. Khám phá các điểm đến được gợi ý dựa trên tâm trạng.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: AppTheme.subtitleText,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 40),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const CloudmoodLoginScreen(),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            height: 52,
+                            width: double.infinity,
+                            decoration: AppTheme.gradientButtonDecoration(),
+                            child: const Center(
+                              child: Text(
+                                'Đăng nhập tài khoản',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text(
+                              'Chưa có tài khoản? ',
+                              style: TextStyle(color: AppTheme.subtitleText),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const CloudmoodLoginScreen(),
+                                  ),
+                                );
+                              },
+                              child: const Text(
+                                'Đăng ký ngay',
+                                style: TextStyle(
+                                  color: AppTheme.primary,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// 2. LOGGED IN PROFILE DASHBOARD
+// ─── Logged-in Profile Dashboard ────────────────────────────────────────────────
 class ProfileDashboard extends StatefulWidget {
   final UserModel user;
+  final bool notifEnabled;
+  final bool darkModeEnabled;
+  final ValueChanged<bool> onNotifChanged;
+  final ValueChanged<bool> onDarkModeChanged;
   final Function(BuildContext, String, String) onEditProfile;
   final VoidCallback onChangePassword;
   final VoidCallback onLogout;
@@ -508,6 +692,10 @@ class ProfileDashboard extends StatefulWidget {
   const ProfileDashboard({
     super.key,
     required this.user,
+    required this.notifEnabled,
+    required this.darkModeEnabled,
+    required this.onNotifChanged,
+    required this.onDarkModeChanged,
     required this.onEditProfile,
     required this.onChangePassword,
     required this.onLogout,
@@ -523,10 +711,6 @@ class _ProfileDashboardState extends State<ProfileDashboard>
   List<Map<String, dynamic>> _itineraries = [];
   List<Map<String, dynamic>> _reviews = [];
   bool _isLoading = true;
-
-  // Local settings switches
-  bool _notifEnabled = true;
-  bool _darkModeEnabled = false;
 
   @override
   void initState() {
@@ -560,7 +744,54 @@ class _ProfileDashboardState extends State<ProfileDashboard>
     });
   }
 
-  // Calculate Total Budget from all itineraries
+  final AuthService _authService = AuthService();
+
+  Future<void> _pickAndUploadAvatar(BuildContext context) async {
+    try {
+      final pickedFile = await _selectImage(context);
+      if (pickedFile != null) {
+        if (!context.mounted) return;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(color: AppTheme.primary),
+          ),
+        );
+
+        final bytes = await pickedFile.readAsBytes();
+        final base64String = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+
+        final updated = await _authService.updateProfile(
+          fullName: widget.user.fullName,
+          avatarUrl: base64String,
+        );
+
+        if (context.mounted) {
+          Navigator.of(context).pop(); // dismiss loading
+          if (updated) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Ảnh đại diện đã được cập nhật!'),
+                backgroundColor: AppTheme.green,
+              ),
+            );
+            _loadData();
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Cập nhật ảnh đại diện thất bại.'),
+                backgroundColor: AppTheme.red,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error picking avatar: $e');
+    }
+  }
+
   int get _totalBudget {
     int sum = 0;
     for (var itin in _itineraries) {
@@ -572,7 +803,6 @@ class _ProfileDashboardState extends State<ProfileDashboard>
     return sum;
   }
 
-  // Helper budget formatter: e.g. 5000000 -> 5Tr
   String _formatBudget(int budget) {
     if (budget >= 1000000) {
       double m = budget / 1000000.0;
@@ -584,7 +814,6 @@ class _ProfileDashboardState extends State<ProfileDashboard>
     return '$budget';
   }
 
-  // Show Bottom Sheet to Create Itinerary
   void _showCreateItinerarySheet(BuildContext context) {
     showModalBottomSheet<Map<String, dynamic>>(
       context: context,
@@ -604,24 +833,17 @@ class _ProfileDashboardState extends State<ProfileDashboard>
     });
   }
 
-  // Star Rating Bar builder
   Widget _buildStarRating(double rating) {
     List<Widget> stars = [];
     int fullStars = rating.floor();
     for (int i = 0; i < 5; i++) {
-      if (i < fullStars) {
-        stars.add(
-          const Icon(Icons.star_rounded, color: AppTheme.amber, size: 16),
-        );
-      } else {
-        stars.add(
-          const Icon(
-            Icons.star_border_rounded,
-            color: AppTheme.border,
-            size: 16,
-          ),
-        );
-      }
+      stars.add(
+        Icon(
+          i < fullStars ? Icons.star_rounded : Icons.star_border_rounded,
+          color: i < fullStars ? AppTheme.amber : AppTheme.border,
+          size: 14,
+        ),
+      );
     }
     return Row(children: stars);
   }
@@ -636,218 +858,280 @@ class _ProfileDashboardState extends State<ProfileDashboard>
 
     return Scaffold(
       backgroundColor: AppTheme.background,
-      body: SafeArea(
-        child: NestedScrollView(
-          headerSliverBuilder: (context, innerBoxIsScrolled) {
-            return [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) {
+          return [
+            // ── Hero SliverAppBar ──────────────────────────────────
+            SliverAppBar(
+              expandedHeight: 240,
+              pinned: true,
+              backgroundColor: AppTheme.primaryDark,
+              elevation: 0,
+              actions: [
+                IconButton(
+                  icon: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(20),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.edit_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                  onPressed: () => widget.onEditProfile(
+                    context,
+                    widget.user.fullName,
+                    widget.user.avatar ?? '',
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: const BoxDecoration(
+                    gradient: AppTheme.heroGradient,
+                  ),
+                  child: Stack(
                     children: [
-                      // Header Row
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Hồ sơ cá nhân',
-                            style: AppTheme.sectionTitleStyle,
+                      // Decorative circle
+                      Positioned(
+                        top: -60,
+                        right: -60,
+                        child: Container(
+                          width: 220,
+                          height: 220,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withAlpha(12),
                           ),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.edit_note_rounded,
-                              color: AppTheme.primary,
-                              size: 28,
-                            ),
-                            onPressed: () => widget.onEditProfile(
-                              context,
-                              widget.user.fullName,
-                              widget.user.avatar ?? '',
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                      const SizedBox(height: 16),
-
-                      // User Info Card
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: AppTheme.premiumCardDecoration(),
-                        child: Row(
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: AppTheme.primary.withAlpha(100),
-                                  width: 2,
+                      Positioned(
+                        bottom: -30,
+                        left: -40,
+                        child: Container(
+                          width: 180,
+                          height: 180,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withAlpha(8),
+                          ),
+                        ),
+                      ),
+                      // Content
+                      SafeArea(
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(height: 40),
+                              // Avatar with gradient ring
+                              GestureDetector(
+                                onTap: () => _pickAndUploadAvatar(context),
+                                child: Container(
+                                  padding: const EdgeInsets.all(3),
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: LinearGradient(
+                                      colors: [Colors.white70, Colors.white30],
+                                    ),
+                                  ),
+                                  child: ClipOval(
+                                    child: Container(
+                                      width: 88,
+                                      height: 88,
+                                      color: AppTheme.surfaceVariant,
+                                      child: AvatarImage(
+                                        avatarUrl: widget.user.avatar,
+                                        size: 88,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(40),
-                                child:
-                                    widget.user.avatar != null &&
-                                        widget.user.avatar!.isNotEmpty
-                                    ? Image.network(
-                                        widget.user.avatar!,
-                                        width: 80,
-                                        height: 80,
-                                        fit: BoxFit.cover,
-                                        errorBuilder:
-                                            (context, error, stackTrace) =>
-                                                const Icon(
-                                                  Icons.person,
-                                                  size: 40,
-                                                  color: AppTheme.subtitleText,
-                                                ),
-                                      )
-                                    : const Icon(
-                                        Icons.person,
-                                        size: 40,
-                                        color: AppTheme.subtitleText,
-                                      ),
+                              const SizedBox(height: 12),
+                              Text(
+                                widget.user.fullName,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.4,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    widget.user.fullName,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.darkText,
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withAlpha(20),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.white.withAlpha(40),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.verified_rounded,
+                                      color: Colors.white70,
+                                      size: 12,
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    widget.user.email,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: AppTheme.subtitleText,
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      roleText,
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.primaryPeach,
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          border: Border.all(
-                                            color: AppTheme.primary.withAlpha(
-                                              80,
-                                            ),
-                                            width: 0.5,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          roleText,
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppTheme.primary,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'ID: #${widget.user.id} · $joinDate',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: AppTheme.subtitleText,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+              ),
+            ),
 
-                      // Dynamic Database Statistics
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 16,
-                          horizontal: 10,
-                        ),
-                        decoration: AppTheme.premiumCardDecoration(),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _ProfileStatWidget(
-                              count: _isLoading
-                                  ? '...'
-                                  : '${_itineraries.length}',
-                              label: 'Chuyến đi',
-                            ),
-                            _ProfileStatWidget(
-                              count: _isLoading ? '...' : '${_reviews.length}',
-                              label: 'Đánh giá',
-                            ),
-                            _ProfileStatWidget(
-                              count: _isLoading
-                                  ? '...'
-                                  : _formatBudget(_totalBudget),
-                              label: 'Tổng ngân sách',
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
+            // ── Stats Row ──────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 16,
+                ),
+                decoration: AppTheme.premiumCardDecoration(),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildStat(
+                      '${_itineraries.length}',
+                      'Hành trình',
+                      Icons.map_rounded,
+                      AppTheme.primary,
+                    ),
+                    _buildVertDivider(),
+                    _buildStat(
+                      _formatBudget(_totalBudget),
+                      'Tổng ngân sách',
+                      Icons.payments_rounded,
+                      AppTheme.green,
+                    ),
+                    _buildVertDivider(),
+                    _buildStat(
+                      '${_reviews.length}',
+                      'Đánh giá',
+                      Icons.star_rounded,
+                      AppTheme.amber,
+                    ),
+                  ],
                 ),
               ),
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _SliverTabBarDelegate(
-                  TabBar(
-                    controller: _tabController,
-                    labelColor: AppTheme.primary,
-                    unselectedLabelColor: AppTheme.subtitleText,
-                    indicatorColor: AppTheme.primary,
-                    indicatorWeight: 3,
-                    indicatorSize: TabBarIndicatorSize.tab,
-                    tabs: const [
-                      Tab(text: 'Hành trình'),
-                      Tab(text: 'Đánh giá'),
-                      Tab(text: 'Cài đặt'),
-                    ],
+            ),
+
+            // ── Tab bar ────────────────────────────────────────────
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _StickyTabBarDelegate(
+                TabBar(
+                  controller: _tabController,
+                  labelColor: AppTheme.primary,
+                  unselectedLabelColor: AppTheme.subtitleText,
+                  indicatorColor: AppTheme.primary,
+                  indicatorWeight: 2.5,
+                  indicatorSize: TabBarIndicatorSize.label,
+                  labelStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
                   ),
+                  unselectedLabelStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  tabs: const [
+                    Tab(text: 'Lịch trình'),
+                    Tab(text: 'Đánh giá'),
+                    Tab(text: 'Cài đặt'),
+                  ],
                 ),
               ),
-            ];
-          },
-          body: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildItinerariesTab(),
-              _buildReviewsTab(),
-              _buildSettingsTab(),
-            ],
-          ),
+            ),
+          ];
+        },
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            // ── Tab 1: Itineraries ────────────────────────────────
+            _buildItineraryTab(),
+            // ── Tab 2: Reviews ────────────────────────────────────
+            _buildReviewsTab(),
+            // ── Tab 3: Settings ───────────────────────────────────
+            _buildSettingsTab(joinDate),
+          ],
         ),
       ),
     );
   }
 
-  // TAB 1: ITINERARIES FROM DB
-  Widget _buildItinerariesTab() {
+  Widget _buildStat(String value, String label, IconData icon, Color color) {
+    return Expanded(
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withAlpha(20),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.darkText,
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10,
+              color: AppTheme.subtitleText,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVertDivider() {
+    return Container(width: 1, height: 50, color: AppTheme.border);
+  }
+
+  Widget _buildItineraryTab() {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(color: AppTheme.primary),
+        child: CircularProgressIndicator(
+          color: AppTheme.primary,
+          strokeWidth: 2.5,
+        ),
       );
     }
 
@@ -855,89 +1139,103 @@ class _ProfileDashboardState extends State<ProfileDashboard>
       return Center(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.luggage_outlined,
-                  size: 64,
-                  color: AppTheme.primary.withAlpha(120),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryContainer,
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Chưa có hành trình nào',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: AppTheme.darkText,
+                child: const Icon(
+                  Icons.map_outlined,
+                  size: 48,
+                  color: AppTheme.primary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Chưa có hành trình nào',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.darkText,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Hãy tạo hành trình đầu tiên của bạn!',
+                style: TextStyle(color: AppTheme.subtitleText, fontSize: 13),
+              ),
+              const SizedBox(height: 24),
+              GestureDetector(
+                onTap: () => _showCreateItinerarySheet(context),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
                   ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Hãy bắt đầu kỳ nghỉ tuyệt vời của bạn bằng cách thêm một chuyến đi mới ngay hôm nay!',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: AppTheme.subtitleText),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  decoration: AppTheme.gradientButtonDecoration(radius: 14),
+                  child: const Text(
+                    '+ Tạo hành trình',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
                   ),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text(
-                    'Tạo chuyến đi đầu tiên',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  onPressed: () => _showCreateItinerarySheet(context),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       );
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
       itemCount: _itineraries.length,
       itemBuilder: (context, index) {
-        final item = _itineraries[index];
-        final budgetFormatted = _formatBudget(
-          (item['budget'] as num?)?.toInt() ?? 0,
-        );
-
+        final trip = _itineraries[index];
         return GestureDetector(
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (context) => TripOverviewScreen(itinerary: item),
+                builder: (context) => TripOverviewScreen(itinerary: trip),
               ),
             );
           },
           child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(12),
-            decoration: AppTheme.premiumCardDecoration(radius: 16),
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.all(16),
+            decoration: AppTheme.premiumCardDecoration(),
             child: Row(
               children: [
+                // Image thumbnail
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=300&auto=format&fit=crop&q=80',
-                    width: 70,
-                    height: 70,
-                    fit: BoxFit.cover,
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    decoration: const BoxDecoration(
+                      gradient: AppTheme.primaryGradient,
+                    ),
+                    child: trip['image_url'] != null
+                        ? Image.network(
+                            trip['image_url'] as String,
+                            fit: BoxFit.cover,
+                            errorBuilder: (c, e, s) => const Icon(
+                              Icons.flight_takeoff_rounded,
+                              color: Colors.white70,
+                              size: 28,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.flight_takeoff_rounded,
+                            color: Colors.white70,
+                            size: 28,
+                          ),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -946,47 +1244,67 @@ class _ProfileDashboardState extends State<ProfileDashboard>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item['title'] ?? 'Chuyến đi không tên',
+                        trip['title'] as String? ?? 'Hành trình',
                         style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
                           color: AppTheme.darkText,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        '${item['days']} ngày · Bắt đầu: ${item['startDate']}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.subtitleText,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryPeach,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'Chi phí: $budgetFormatted',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppTheme.primary,
-                            fontWeight: FontWeight.bold,
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on_rounded,
+                            size: 12,
+                            color: AppTheme.subtitleText,
                           ),
-                        ),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              trip['destination'] as String? ?? 'Chưa xác định',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.subtitleText,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _buildTripChip(
+                            '${trip['days'] ?? '?'} ngày',
+                            Icons.calendar_today_rounded,
+                            AppTheme.primaryContainer,
+                            AppTheme.primary,
+                          ),
+                          const SizedBox(width: 6),
+                          if (trip['budget'] != null)
+                            _buildTripChip(
+                              _formatBudget(
+                                (trip['budget'] is num)
+                                    ? (trip['budget'] as num).toInt()
+                                    : int.tryParse(trip['budget'].toString()) ??
+                                          0,
+                              ),
+                              Icons.payments_rounded,
+                              AppTheme.lightGreen,
+                              AppTheme.green,
+                            ),
+                        ],
                       ),
                     ],
                   ),
                 ),
                 const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 14,
-                  color: Colors.black26,
+                  Icons.chevron_right_rounded,
+                  color: AppTheme.subtitleText,
                 ),
               ],
             ),
@@ -996,7 +1314,30 @@ class _ProfileDashboardState extends State<ProfileDashboard>
     );
   }
 
-  // TAB 2: REVIEWS FROM DB
+  Widget _buildTripChip(String label, IconData icon, Color bg, Color fg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 10, color: fg),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: fg,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildReviewsTab() {
     if (_isLoading) {
       return const Center(
@@ -1008,107 +1349,80 @@ class _ProfileDashboardState extends State<ProfileDashboard>
       return Center(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.rate_review_outlined,
-                  size: 64,
-                  color: AppTheme.primary.withAlpha(120),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppTheme.lightAmber,
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Chưa có đánh giá nào',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: AppTheme.darkText,
-                  ),
+                child: const Icon(
+                  Icons.star_outline_rounded,
+                  size: 48,
+                  color: AppTheme.amber,
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Ghé thăm mục Khách sạn hoặc gợi ý để viết những dòng đánh giá trải nghiệm đầu tiên!',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: AppTheme.subtitleText),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Chưa có đánh giá nào',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.darkText,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Hãy chia sẻ trải nghiệm của bạn!',
+                style: TextStyle(color: AppTheme.subtitleText, fontSize: 13),
+              ),
+            ],
           ),
         ),
       );
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
       itemCount: _reviews.length,
       itemBuilder: (context, index) {
-        final item = _reviews[index];
-        final place = item['Place'] as Map<String, dynamic>?;
-        final placeName = place != null
-            ? place['name'] as String
-            : 'Địa điểm du lịch';
-        final placeImage = place != null
-            ? place['image'] as String
-            : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=200';
-        final rating = (item['rating'] as num?)?.toDouble() ?? 5.0;
-
+        final review = _reviews[index];
+        final double rating = (review['rating'] as num?)?.toDouble() ?? 0.0;
         return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(12),
-          decoration: AppTheme.premiumCardDecoration(radius: 16),
-          child: Row(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(16),
+          decoration: AppTheme.premiumCardDecoration(),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  placeImage,
-                  width: 70,
-                  height: 70,
-                  fit: BoxFit.cover,
-                  errorBuilder: (c, e, s) =>
-                      Container(width: 70, height: 70, color: Colors.grey[200]),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      placeName,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      review['place_name'] as String? ?? 'Địa điểm',
                       style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                         color: AppTheme.darkText,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    _buildStarRating(rating),
-                    const SizedBox(height: 6),
-                    Text(
-                      item['comment'] ?? '',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.black87,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Ngày đăng: ${item['publishedDate'] ?? ""}',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: AppTheme.subtitleText,
-                      ),
-                    ),
-                  ],
+                  ),
+                  _buildStarRating(rating),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                review['comment'] as String? ?? '',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppTheme.bodyText,
+                  height: 1.4,
                 ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -1117,210 +1431,288 @@ class _ProfileDashboardState extends State<ProfileDashboard>
     );
   }
 
-  // TAB 3: SYSTEM PREFERENCE SETTINGS
-  Widget _buildSettingsTab() {
+  Widget _buildSettingsTab(String joinDate) {
     return ListView(
-      padding: const EdgeInsets.all(16),
-      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
       children: [
-        // Section: Account
-        const Text(
-          'TÀI KHOẢN',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.subtitleText,
-            letterSpacing: 1,
-          ),
-        ),
-        const SizedBox(height: 8),
+        // Account info
         Container(
-          decoration: AppTheme.premiumCardDecoration(radius: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: AppTheme.premiumCardDecoration(),
           child: Column(
             children: [
-              _buildSettingTile(
-                icon: Icons.password_rounded,
-                iconColor: Colors.blueAccent,
+              _buildInfoRow(
+                Icons.email_outlined,
+                'Email',
+                widget.user.email,
+                AppTheme.primary,
+              ),
+              const Divider(color: AppTheme.divider),
+              _buildInfoRow(
+                Icons.calendar_today_rounded,
+                'Ngày tham gia',
+                joinDate,
+                AppTheme.green,
+              ),
+              const Divider(color: AppTheme.divider),
+              _buildInfoRow(
+                Icons.verified_rounded,
+                'Vai trò',
+                widget.user.role ? 'Quản trị viên' : 'Thành viên PRO',
+                AppTheme.amber,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Preferences
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: AppTheme.premiumCardDecoration(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Tùy chọn',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.subtitleText,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildToggleTile(
+                icon: Icons.notifications_active_rounded,
+                iconBg: AppTheme.primaryContainer,
+                iconColor: AppTheme.primary,
+                title: 'Thông báo',
+                subtitle: 'Nhận cập nhật về hành trình',
+                value: widget.notifEnabled,
+                onChanged: widget.onNotifChanged,
+              ),
+              const Divider(color: AppTheme.divider),
+              _buildToggleTile(
+                icon: Icons.dark_mode_rounded,
+                iconBg: const Color(0xFF2D2D3A).withAlpha(20),
+                iconColor: const Color(0xFF6366F1),
+                title: 'Chế độ tối',
+                subtitle: 'Giao diện tối hơn',
+                value: widget.darkModeEnabled,
+                onChanged: widget.onDarkModeChanged,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Actions
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: AppTheme.premiumCardDecoration(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Tài khoản',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.subtitleText,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildActionTile(
+                icon: Icons.lock_outline_rounded,
+                iconBg: AppTheme.accentLight,
+                iconColor: AppTheme.accent,
                 title: 'Đổi mật khẩu',
                 onTap: widget.onChangePassword,
               ),
-              const Divider(height: 1, thickness: 0.5),
-              _buildSettingTile(
-                icon: Icons.notifications_active_rounded,
+              const Divider(color: AppTheme.divider),
+              _buildActionTile(
+                icon: Icons.help_outline_rounded,
+                iconBg: AppTheme.lightAmber,
                 iconColor: AppTheme.amber,
-                title: 'Thông báo ứng dụng',
-                trailing: Switch(
-                  value: _notifEnabled,
-                  activeThumbColor: AppTheme.primary,
-                  onChanged: (val) {
-                    setState(() {
-                      _notifEnabled = val;
-                    });
-                  },
-                ),
+                title: 'Trợ giúp & Hỗ trợ',
+                onTap: () {},
+              ),
+              const Divider(color: AppTheme.divider),
+              _buildActionTile(
+                icon: Icons.logout_rounded,
+                iconBg: AppTheme.lightRed,
+                iconColor: AppTheme.red,
+                title: 'Đăng xuất',
+                titleColor: AppTheme.red,
+                onTap: widget.onLogout,
               ),
             ],
           ),
         ),
         const SizedBox(height: 20),
-
-        // Section: System Preference
-        const Text(
-          'TÙY CHỌN HỆ THỐNG',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.subtitleText,
-            letterSpacing: 1,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: AppTheme.premiumCardDecoration(radius: 16),
-          child: Column(
-            children: [
-              _buildSettingTile(
-                icon: Icons.dark_mode_rounded,
-                iconColor: Colors.purple,
-                title: 'Chế độ tối (Bản thử nghiệm)',
-                trailing: Switch(
-                  value: _darkModeEnabled,
-                  activeThumbColor: AppTheme.primary,
-                  onChanged: (val) {
-                    setState(() {
-                      _darkModeEnabled = val;
-                    });
-                  },
-                ),
-              ),
-              const Divider(height: 1, thickness: 0.5),
-              _buildSettingTile(
-                icon: Icons.translate_rounded,
-                iconColor: Colors.teal,
-                title: 'Ngôn ngữ',
-                trailing: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Tiếng Việt',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.subtitleText,
-                      ),
-                    ),
-                    SizedBox(width: 4),
-                    Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 12,
-                      color: Colors.black26,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 32),
-
-        // Log Out Button
-        Container(
-          decoration: AppTheme.premiumCardDecoration(radius: 16),
-          child: _buildSettingTile(
-            icon: Icons.logout_rounded,
-            iconColor: Colors.redAccent,
-            title: 'Đăng xuất tài khoản',
-            titleColor: Colors.redAccent,
-            onTap: widget.onLogout,
+        // App version
+        const Center(
+          child: Text(
+            'cloudmood v1.0.0 — Phiên bản hiện tại',
+            style: TextStyle(fontSize: 11, color: AppTheme.hintText),
           ),
         ),
       ],
     );
   }
 
-  // Setting tile helper
-  Widget _buildSettingTile({
+  Widget _buildInfoRow(IconData icon, String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withAlpha(18),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 16, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.subtitleText,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppTheme.darkText,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToggleTile({
     required IconData icon,
+    required Color iconBg,
     required Color iconColor,
     required String title,
-    Color titleColor = AppTheme.darkText,
-    Widget? trailing,
-    VoidCallback? onTap,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: ListTile(
-        onTap: onTap,
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: iconColor.withAlpha(20),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: iconColor, size: 18),
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: titleColor,
-          ),
-        ),
-        trailing:
-            trailing ??
-            const Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 14,
-              color: Colors.black26,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconBg,
+              borderRadius: BorderRadius.circular(10),
             ),
+            child: Icon(icon, size: 16, color: iconColor),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.darkText,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.subtitleText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: AppTheme.primary,
+            activeTrackColor: AppTheme.primaryContainer,
+            inactiveThumbColor: AppTheme.subtitleText,
+            inactiveTrackColor: AppTheme.surfaceVariant,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionTile({
+    required IconData icon,
+    required Color iconBg,
+    required Color iconColor,
+    required String title,
+    Color? titleColor,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 16, color: iconColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: titleColor ?? AppTheme.darkText,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: AppTheme.subtitleText,
+              size: 20,
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// Sub-widget for profile counter statistics
-class _ProfileStatWidget extends StatelessWidget {
-  final String count;
-  final String label;
-
-  const _ProfileStatWidget({required this.count, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          count,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-            color: AppTheme.primary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppTheme.subtitleText,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// Persistent Header Delegate for beautiful pinned tabs
-class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
+// ─── Sticky Tab Bar Delegate ─────────────────────────────────────────────────
+class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
   final TabBar tabBar;
 
-  _SliverTabBarDelegate(this.tabBar);
-
-  @override
-  double get minExtent => tabBar.preferredSize.height;
-  @override
-  double get maxExtent => tabBar.preferredSize.height;
+  const _StickyTabBarDelegate(this.tabBar);
 
   @override
   Widget build(
@@ -1332,7 +1724,13 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  bool shouldRebuild(covariant _SliverTabBarDelegate oldDelegate) {
-    return false;
+  double get maxExtent => tabBar.preferredSize.height;
+
+  @override
+  double get minExtent => tabBar.preferredSize.height;
+
+  @override
+  bool shouldRebuild(covariant _StickyTabBarDelegate oldDelegate) {
+    return tabBar != oldDelegate.tabBar;
   }
 }

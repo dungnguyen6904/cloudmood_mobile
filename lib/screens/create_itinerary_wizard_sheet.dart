@@ -36,31 +36,38 @@ class _CreateItineraryWizardSheetState
   final List<Map<String, String>> _popularDestinations = [
     {
       'name': 'Đà Nẵng',
-      'image': 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=200&auto=format&fit=crop&q=80',
+      'image':
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=200&auto=format&fit=crop&q=80',
     },
     {
       'name': 'Hội An',
-      'image': 'https://images.unsplash.com/photo-1528127269322-539801943592?w=200&auto=format&fit=crop&q=80',
+      'image':
+          'https://images.unsplash.com/photo-1528127269322-539801943592?w=200&auto=format&fit=crop&q=80',
     },
     {
       'name': 'Nha Trang',
-      'image': 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200&auto=format&fit=crop&q=80',
+      'image':
+          'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200&auto=format&fit=crop&q=80',
     },
     {
       'name': 'Đà Lạt',
-      'image': 'https://images.unsplash.com/photo-1583244532610-2a234e7c3eca?w=200&auto=format&fit=crop&q=80',
+      'image':
+          'https://images.unsplash.com/photo-1583244532610-2a234e7c3eca?w=200&auto=format&fit=crop&q=80',
     },
     {
       'name': 'Phuket',
-      'image': 'https://images.unsplash.com/photo-1589308078059-be1415eab4c3?w=200&auto=format&fit=crop&q=80',
+      'image':
+          'https://images.unsplash.com/photo-1589308078059-be1415eab4c3?w=200&auto=format&fit=crop&q=80',
     },
     {
       'name': 'Bali',
-      'image': 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=200&auto=format&fit=crop&q=80',
+      'image':
+          'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=200&auto=format&fit=crop&q=80',
     },
     {
       'name': 'Singapore',
-      'image': 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=200&auto=format&fit=crop&q=80',
+      'image':
+          'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=200&auto=format&fit=crop&q=80',
     },
   ];
 
@@ -225,7 +232,9 @@ class _CreateItineraryWizardSheetState
       _isSaving = true;
     });
 
-    final isSupported = await DatabaseService().isDestinationSupported(destinationName);
+    final isSupported = await DatabaseService().isDestinationSupported(
+      destinationName,
+    );
 
     setState(() {
       _isSaving = false;
@@ -242,12 +251,21 @@ class _CreateItineraryWizardSheetState
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             title: const Row(
               children: [
-                Icon(Icons.info_outline_rounded, color: AppTheme.amber, size: 28),
+                Icon(
+                  Icons.info_outline_rounded,
+                  color: AppTheme.amber,
+                  size: 28,
+                ),
                 SizedBox(width: 10),
-                Text('Chưa Hỗ Trợ', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  'Chưa Hỗ Trợ',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ],
             ),
             content: Text(
@@ -258,7 +276,13 @@ class _CreateItineraryWizardSheetState
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Chọn địa điểm khác', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
+                child: const Text(
+                  'Chọn địa điểm khác',
+                  style: TextStyle(
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           ),
@@ -352,6 +376,7 @@ class _CreateItineraryWizardSheetState
             const SnackBar(
               content: Text('Đã thêm hành trình mới thành công!'),
               backgroundColor: AppTheme.green,
+              behavior: SnackBarBehavior.fixed,
             ),
           );
         } else {
@@ -359,6 +384,7 @@ class _CreateItineraryWizardSheetState
             const SnackBar(
               content: Text('Tạo hành trình thất bại. Vui lòng thử lại.'),
               backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.fixed,
             ),
           );
         }
@@ -367,7 +393,10 @@ class _CreateItineraryWizardSheetState
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Đã xảy ra lỗi: $e')));
+        ).showSnackBar(SnackBar(
+          content: Text('Đã xảy ra lỗi: $e'),
+          behavior: SnackBarBehavior.fixed,
+        ));
       }
     } finally {
       if (mounted) {
@@ -432,7 +461,9 @@ class _CreateItineraryWizardSheetState
                           margin: const EdgeInsets.symmetric(horizontal: 4),
                           height: 5,
                           decoration: BoxDecoration(
-                            color: isActive ? AppTheme.primary : AppTheme.border,
+                            color: isActive
+                                ? AppTheme.primary
+                                : AppTheme.border,
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
@@ -467,7 +498,9 @@ class _CreateItineraryWizardSheetState
               ),
               decoration: const BoxDecoration(
                 color: Colors.white,
-                border: Border(top: BorderSide(color: AppTheme.border, width: 1)),
+                border: Border(
+                  top: BorderSide(color: AppTheme.border, width: 1),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -476,6 +509,7 @@ class _CreateItineraryWizardSheetState
                   if (_currentStep > 0)
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(100, 52),
                         side: const BorderSide(color: AppTheme.border),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
@@ -575,10 +609,7 @@ class _CreateItineraryWizardSheetState
           const SizedBox(height: 20),
 
           // Destination display
-          const Text(
-            'Điểm đến của bạn',
-            style: AppTheme.bodyBoldStyle,
-          ),
+          const Text('Điểm đến của bạn', style: AppTheme.bodyBoldStyle),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -592,7 +623,9 @@ class _CreateItineraryWizardSheetState
                 const Icon(Icons.location_on_rounded, color: AppTheme.primary),
                 const SizedBox(width: 10),
                 Text(
-                  _selectedDestination.isNotEmpty ? _selectedDestination : 'Chưa chọn',
+                  _selectedDestination.isNotEmpty
+                      ? _selectedDestination
+                      : 'Chưa chọn',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -1040,44 +1073,62 @@ class _CreateItineraryWizardSheetState
           const SizedBox(height: 8),
           const Text(
             'Bước 1: Chọn điểm đến',
-            style: TextStyle(fontSize: 13, color: AppTheme.subtitleText, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontSize: 13,
+              color: AppTheme.subtitleText,
+              fontWeight: FontWeight.w500,
+            ),
           ),
           const SizedBox(height: 16),
-          const Text('Bạn muốn đi du lịch ở đâu?', style: AppTheme.bodyBoldStyle),
+          const Text(
+            'Bạn muốn đi du lịch ở đâu?',
+            style: AppTheme.bodyBoldStyle,
+          ),
           const SizedBox(height: 12),
-          
+
           // Search input field
           TextField(
             controller: _searchController,
             onChanged: _onSearchChanged,
-            decoration: AppTheme.inputDecoration(
-              hintText: 'Nhập thành phố, vùng miền...',
-              prefixIcon: Icons.search_rounded,
-            ).copyWith(
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear_rounded, color: AppTheme.subtitleText),
-                      onPressed: () {
-                        setState(() {
-                          _searchController.clear();
-                          _searchResults = [];
-                        });
-                      },
-                    )
-                  : null,
-            ),
+            decoration:
+                AppTheme.inputDecoration(
+                  hintText: 'Nhập thành phố, vùng miền...',
+                  prefixIcon: Icons.search_rounded,
+                ).copyWith(
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(
+                            Icons.clear_rounded,
+                            color: AppTheme.subtitleText,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _searchController.clear();
+                              _searchResults = [];
+                            });
+                          },
+                        )
+                      : null,
+                ),
           ),
-          
+
           if (_isLoadingSearch) ...[
             const SizedBox(height: 16),
             const Center(
               child: CircularProgressIndicator(color: AppTheme.primary),
             ),
           ],
-          
+
           if (_searchResults.isNotEmpty) ...[
             const SizedBox(height: 16),
-            const Text('Gợi ý tìm kiếm', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.subtitleText)),
+            const Text(
+              'Gợi ý tìm kiếm',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.subtitleText,
+              ),
+            ),
             const SizedBox(height: 8),
             Container(
               decoration: BoxDecoration(
@@ -1089,18 +1140,38 @@ class _CreateItineraryWizardSheetState
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _searchResults.length,
-                separatorBuilder: (context, index) => const Divider(height: 1, color: AppTheme.border),
+                separatorBuilder: (context, index) =>
+                    const Divider(height: 1, color: AppTheme.border),
                 itemBuilder: (context, index) {
                   final feature = _searchResults[index];
                   final props = feature['properties'] ?? {};
-                  final String name = props['city'] ?? props['name'] ?? props['formatted'] ?? '';
+                  final String name =
+                      props['city'] ??
+                      props['name'] ??
+                      props['formatted'] ??
+                      '';
                   final String formatted = props['formatted'] ?? '';
                   return Material(
                     color: Colors.transparent,
                     child: ListTile(
-                      leading: const Icon(Icons.location_on_rounded, color: AppTheme.primary),
-                      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.darkText)),
-                      subtitle: Text(formatted, style: const TextStyle(fontSize: 12, color: AppTheme.subtitleText)),
+                      leading: const Icon(
+                        Icons.location_on_rounded,
+                        color: AppTheme.primary,
+                      ),
+                      title: Text(
+                        name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.darkText,
+                        ),
+                      ),
+                      subtitle: Text(
+                        formatted,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.subtitleText,
+                        ),
+                      ),
                       onTap: () {
                         _selectDestination(name);
                       },
@@ -1127,7 +1198,7 @@ class _CreateItineraryWizardSheetState
                 final dest = _popularDestinations[index];
                 final String name = dest['name']!;
                 final String imageUrl = dest['image']!;
-                
+
                 return GestureDetector(
                   onTap: () {
                     _selectDestination(name);

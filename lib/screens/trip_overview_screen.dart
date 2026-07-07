@@ -868,9 +868,9 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
         elevation: 0.5,
         leading: IconButton(
           icon: const Icon(
-            Icons.home_rounded,
+            Icons.arrow_back_ios_new_rounded,
             color: AppTheme.primary,
-            size: 28,
+            size: 20,
           ),
           onPressed: () {
             // Pop back to the parent screen (Home or Profile)
@@ -892,6 +892,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Đã sao chép liên kết chuyến đi!'),
+                  behavior: SnackBarBehavior.fixed,
                 ),
               );
             },
@@ -910,9 +911,9 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
             color: Colors.white,
             child: TabBar(
               controller: _tabController,
-              labelColor: const Color(0xFFFF5247),
+              labelColor: AppTheme.primary,
               unselectedLabelColor: AppTheme.subtitleText,
-              indicatorColor: const Color(0xFFFF5247),
+              indicatorColor: AppTheme.primary,
               indicatorWeight: 3,
               indicatorSize: TabBarIndicatorSize.tab,
               labelStyle: const TextStyle(
@@ -963,7 +964,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
-                colors: [Color(0xFFFF5247), Color(0xFF9C27B0)],
+                colors: [AppTheme.primary, Color(0xFF7C3AED)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -986,7 +987,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
           FloatingActionButton(
             heroTag: 'map_btn',
             onPressed: _showMapOverview,
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: AppTheme.darkText,
             mini: true,
             child: const Icon(Icons.map_rounded, color: Colors.white, size: 20),
           ),
@@ -1008,7 +1009,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                 _createNewSection();
               }
             },
-            backgroundColor: const Color(0xFF0F172A),
+            backgroundColor: AppTheme.primary,
             child: const Icon(Icons.add, color: Colors.white),
           ),
         ],
@@ -1078,15 +1079,21 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
           checklistId: checklistId,
           currentItems: currentItems,
           onAddItems: (newItems) async {
-            final List<Map<String, dynamic>> updated = List<Map<String, dynamic>>.from(
-              currentItems.map((it) => Map<String, dynamic>.from(it as Map)).toList(),
-            );
+            final List<Map<String, dynamic>> updated =
+                List<Map<String, dynamic>>.from(
+                  currentItems
+                      .map((it) => Map<String, dynamic>.from(it as Map))
+                      .toList(),
+                );
             for (var itemText in newItems) {
               if (!updated.any((it) => it['text'] == itemText)) {
                 updated.add({'text': itemText, 'done': false});
               }
             }
-            final success = await DatabaseService().updateSavedItemTodoItems(checklistId, updated);
+            final success = await DatabaseService().updateSavedItemTodoItems(
+              checklistId,
+              updated,
+            );
             if (success && mounted) {
               _loadData(silent: true);
             }
@@ -1103,17 +1110,22 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     List<Map<String, dynamic>> sectionDetails,
   ) {
     final String text = detail['noteText'] ?? detail['notetext'] ?? '';
-    final bool isCollapsed = detail['isCollapsed'] == true || detail['iscollapsed'] == true;
+    final bool isCollapsed =
+        detail['isCollapsed'] == true || detail['iscollapsed'] == true;
     final int id = detail['id'] as int;
     final bool isEditing = id == _editingNoteId;
 
     final bool isTodo = text.startsWith('[TODO]');
-    final String displayTitle = isTodo ? text.replaceFirst('[TODO]', '').trim() : text;
+    final String displayTitle = isTodo
+        ? text.replaceFirst('[TODO]', '').trim()
+        : text;
 
     TextEditingController? editController;
     if (isEditing) {
       editController = TextEditingController(
-        text: isTodo ? displayTitle : (text == 'Thêm ghi chú tại đây' ? '' : text),
+        text: isTodo
+            ? displayTitle
+            : (text == 'Thêm ghi chú tại đây' ? '' : text),
       );
       editController.selection = TextSelection.fromPosition(
         TextPosition(offset: editController.text.length),
@@ -1143,7 +1155,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
       }
     }
 
-    final bool allDone = todoList.isNotEmpty && todoList.every((item) => item['done'] == true);
+    final bool allDone =
+        todoList.isNotEmpty && todoList.every((item) => item['done'] == true);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1167,7 +1180,9 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  isTodo ? Icons.fact_check_outlined : Icons.description_outlined,
+                  isTodo
+                      ? Icons.fact_check_outlined
+                      : Icons.description_outlined,
                   color: AppTheme.subtitleText,
                   size: 16,
                 ),
@@ -1186,8 +1201,13 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                             fontWeight: FontWeight.w500,
                           ),
                           decoration: InputDecoration(
-                            hintText: isTodo ? 'Tên danh sách...' : 'Nhập ghi chú...',
-                            hintStyle: const TextStyle(color: Colors.black26, fontSize: 13),
+                            hintText: isTodo
+                                ? 'Tên danh sách...'
+                                : 'Nhập ghi chú...',
+                            hintStyle: const TextStyle(
+                              color: Colors.black26,
+                              fontSize: 13,
+                            ),
                             border: InputBorder.none,
                             isDense: true,
                             contentPadding: EdgeInsets.zero,
@@ -1195,10 +1215,15 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                           onSubmitted: (val) async {
                             final cleanVal = val.trim();
                             String finalVal = cleanVal.isEmpty
-                                ? (isTodo ? 'Danh sách công việc' : 'Ghi chú mới')
+                                ? (isTodo
+                                      ? 'Danh sách công việc'
+                                      : 'Ghi chú mới')
                                 : cleanVal;
                             if (isTodo) finalVal = '[TODO] $finalVal';
-                            await DatabaseService().updateSavedItemText(id, finalVal);
+                            await DatabaseService().updateSavedItemText(
+                              id,
+                              finalVal,
+                            );
                             setState(() => _editingNoteId = null);
                             await _loadData(silent: true);
                           },
@@ -1207,8 +1232,12 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                           onTap: () => setState(() => _editingNoteId = id),
                           child: Text(
                             isTodo
-                                ? (displayTitle.isEmpty ? 'Danh sách công việc' : displayTitle)
-                                : (text.isEmpty ? 'Thêm ghi chú tại đây' : text),
+                                ? (displayTitle.isEmpty
+                                      ? 'Danh sách công việc'
+                                      : displayTitle)
+                                : (text.isEmpty
+                                      ? 'Thêm ghi chú tại đây'
+                                      : text),
                             style: const TextStyle(
                               fontSize: 13,
                               color: AppTheme.darkText,
@@ -1232,13 +1261,19 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                     setState(() => _editingNoteId = null);
                     await _loadData(silent: true);
                   },
-                  child: const Icon(Icons.check_rounded, color: AppTheme.green, size: 22),
+                  child: const Icon(
+                    Icons.check_rounded,
+                    color: AppTheme.green,
+                    size: 22,
+                  ),
                 )
               else if (isTodo)
                 GestureDetector(
                   onTap: () {
                     final newDone = !allDone;
-                    final updated = todoList.map((item) => {...item as Map, 'done': newDone}).toList();
+                    final updated = todoList
+                        .map((item) => {...item as Map, 'done': newDone})
+                        .toList();
                     DatabaseService()
                         .updateSavedItemTodoItems(id, updated)
                         .then((_) => _loadData(silent: true));
@@ -1289,8 +1324,12 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                 .then((_) => _loadData(silent: true));
                           },
                           child: Icon(
-                            done ? Icons.check_circle : Icons.radio_button_unchecked,
-                            color: done ? AppTheme.primary : AppTheme.subtitleText,
+                            done
+                                ? Icons.check_circle
+                                : Icons.radio_button_unchecked,
+                            color: done
+                                ? AppTheme.primary
+                                : AppTheme.subtitleText,
                             size: 20,
                           ),
                         ),
@@ -1300,8 +1339,12 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                             itemText,
                             style: TextStyle(
                               fontSize: 13,
-                              color: done ? AppTheme.subtitleText : AppTheme.darkText,
-                              decoration: done ? TextDecoration.lineThrough : null,
+                              color: done
+                                  ? AppTheme.subtitleText
+                                  : AppTheme.darkText,
+                              decoration: done
+                                  ? TextDecoration.lineThrough
+                                  : null,
                             ),
                           ),
                         ),
@@ -1313,7 +1356,11 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                 .updateSavedItemTodoItems(id, updated)
                                 .then((_) => _loadData(silent: true));
                           },
-                          child: const Icon(Icons.close, size: 16, color: Colors.redAccent),
+                          child: const Icon(
+                            Icons.close,
+                            size: 16,
+                            color: Colors.redAccent,
+                          ),
                         ),
                       ],
                     ),
@@ -1330,13 +1377,20 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
               padding: const EdgeInsets.only(left: 36),
               child: Row(
                 children: [
-                  const Icon(Icons.radio_button_unchecked, color: AppTheme.subtitleText, size: 20),
+                  const Icon(
+                    Icons.radio_button_unchecked,
+                    color: AppTheme.subtitleText,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
                       decoration: const InputDecoration(
                         hintText: 'Thêm một số mục',
-                        hintStyle: TextStyle(color: AppTheme.subtitleText, fontSize: 13),
+                        hintStyle: TextStyle(
+                          color: AppTheme.subtitleText,
+                          fontSize: 13,
+                        ),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(vertical: 4),
@@ -1395,8 +1449,11 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.card_travel_outlined,
-                                  color: AppTheme.subtitleText, size: 16),
+                              Icon(
+                                Icons.card_travel_outlined,
+                                color: AppTheme.subtitleText,
+                                size: 16,
+                              ),
                               SizedBox(width: 6),
                               Text(
                                 'Danh sách làm sẵn',
@@ -1418,7 +1475,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                             ...reactions.map((emoji) {
                               return GestureDetector(
                                 onTap: () {
-                                  final updated = List.from(reactions)..remove(emoji);
+                                  final updated = List.from(reactions)
+                                    ..remove(emoji);
                                   DatabaseService()
                                       .updateSavedItemReactions(id, updated)
                                       .then((_) => _loadData(silent: true));
@@ -1451,16 +1509,22 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                   onTap: () => _removePlaceDetail(id, text, isSavedPlace: true),
                   child: const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Icon(Icons.delete_outline_rounded,
-                        color: AppTheme.subtitleText, size: 18),
+                    child: Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppTheme.subtitleText,
+                      size: 18,
+                    ),
                   ),
                 ),
                 ReorderableDragStartListener(
                   index: listIdx,
                   child: const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 4),
-                    child: Icon(Icons.drag_indicator_rounded,
-                        color: AppTheme.subtitleText, size: 18),
+                    child: Icon(
+                      Icons.drag_indicator_rounded,
+                      color: AppTheme.subtitleText,
+                      size: 18,
+                    ),
                   ),
                 ),
                 GestureDetector(
@@ -1499,8 +1563,14 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
         children: [
           Text(emoji, style: const TextStyle(fontSize: 14)),
           const SizedBox(width: 3),
-          const Text('1',
-              style: TextStyle(fontSize: 10, color: AppTheme.primary, fontWeight: FontWeight.bold)),
+          const Text(
+            '1',
+            style: TextStyle(
+              fontSize: 10,
+              color: AppTheme.primary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -1510,81 +1580,646 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     // Full emoji list organized by categories
     const Map<String, List<String>> emojiCategories = {
       'Mặt cười & cảm xúc': [
-        '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','😊',
-        '😇','🥰','😍','🤩','😘','😗','😚','😙','🥲','😋',
-        '😛','😜','🤪','😝','🤑','🤗','🤭','🫢','🫣','🤫',
-        '🤔','🫡','🤐','🤨','😐','😑','😶','😏','😒','🙄',
-        '😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕',
-        '🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥸',
-        '😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲',
-        '😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱',
-        '😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠',
-        '🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻',
-        '👽','👾','🤖',
+        '😀',
+        '😃',
+        '😄',
+        '😁',
+        '😆',
+        '😅',
+        '🤣',
+        '😂',
+        '🙂',
+        '😊',
+        '😇',
+        '🥰',
+        '😍',
+        '🤩',
+        '😘',
+        '😗',
+        '😚',
+        '😙',
+        '🥲',
+        '😋',
+        '😛',
+        '😜',
+        '🤪',
+        '😝',
+        '🤑',
+        '🤗',
+        '🤭',
+        '🫢',
+        '🫣',
+        '🤫',
+        '🤔',
+        '🫡',
+        '🤐',
+        '🤨',
+        '😐',
+        '😑',
+        '😶',
+        '😏',
+        '😒',
+        '🙄',
+        '😬',
+        '🤥',
+        '😌',
+        '😔',
+        '😪',
+        '🤤',
+        '😴',
+        '😷',
+        '🤒',
+        '🤕',
+        '🤢',
+        '🤮',
+        '🤧',
+        '🥵',
+        '🥶',
+        '🥴',
+        '😵',
+        '🤯',
+        '🤠',
+        '🥸',
+        '😎',
+        '🤓',
+        '🧐',
+        '😕',
+        '😟',
+        '🙁',
+        '☹️',
+        '😮',
+        '😯',
+        '😲',
+        '😳',
+        '🥺',
+        '😦',
+        '😧',
+        '😨',
+        '😰',
+        '😥',
+        '😢',
+        '😭',
+        '😱',
+        '😖',
+        '😣',
+        '😞',
+        '😓',
+        '😩',
+        '😫',
+        '🥱',
+        '😤',
+        '😡',
+        '😠',
+        '🤬',
+        '😈',
+        '👿',
+        '💀',
+        '☠️',
+        '💩',
+        '🤡',
+        '👹',
+        '👺',
+        '👻',
+        '👽',
+        '👾',
+        '🤖',
       ],
       'Con người & cơ thể': [
-        '👋','🤚','🖐️','✋','🖖','🫱','🫲','👌','🤌','🤏',
-        '✌️','🤞','🫰','🤟','🤘','🤙','👈','👉','👆','🖕',
-        '👇','☝️','🫵','👍','👎','✊','👊','🤛','🤜','👏',
-        '🙌','🫶','👐','🤲','🤝','🙏','💪','🦾','🦿','🦵',
-        '🦶','👂','🦻','👃','🫀','🫁','🧠','🦷','🦴','👀',
-        '👁️','👅','👄','🫦',
+        '👋',
+        '🤚',
+        '🖐️',
+        '✋',
+        '🖖',
+        '🫱',
+        '🫲',
+        '👌',
+        '🤌',
+        '🤏',
+        '✌️',
+        '🤞',
+        '🫰',
+        '🤟',
+        '🤘',
+        '🤙',
+        '👈',
+        '👉',
+        '👆',
+        '🖕',
+        '👇',
+        '☝️',
+        '🫵',
+        '👍',
+        '👎',
+        '✊',
+        '👊',
+        '🤛',
+        '🤜',
+        '👏',
+        '🙌',
+        '🫶',
+        '👐',
+        '🤲',
+        '🤝',
+        '🙏',
+        '💪',
+        '🦾',
+        '🦿',
+        '🦵',
+        '🦶',
+        '👂',
+        '🦻',
+        '👃',
+        '🫀',
+        '🫁',
+        '🧠',
+        '🦷',
+        '🦴',
+        '👀',
+        '👁️',
+        '👅',
+        '👄',
+        '🫦',
       ],
       'Du lịch & địa điểm': [
-        '✈️','🚀','🛸','🚁','🛺','🚂','🚆','🚇','🚊','🚝',
-        '🚞','🚋','🚌','🚍','🚎','🏎️','🚑','🚒','🚓','🚐',
-        '🛻','🚚','🚛','🚜','🏍️','🛵','🛺','🚲','🛴','🛹',
-        '🛼','🛷','🚏','🛣️','🛤️','🌍','🌎','🌏','🗺️','🧭',
-        '🏔️','⛰️','🌋','🗻','🏕️','🏖️','🏜️','🏝️','🏞️','🏟️',
-        '🏛️','🏗️','🏘️','🏠','🏡','🏢','🏣','🏤','🏥','🏦',
-        '🏨','🏩','🏪','🏫','🏬','🏭','🏯','🏰','🗼','🗽',
-        '🗾','🎌','🏳️','🏴','🚩',
+        '✈️',
+        '🚀',
+        '🛸',
+        '🚁',
+        '🛺',
+        '🚂',
+        '🚆',
+        '🚇',
+        '🚊',
+        '🚝',
+        '🚞',
+        '🚋',
+        '🚌',
+        '🚍',
+        '🚎',
+        '🏎️',
+        '🚑',
+        '🚒',
+        '🚓',
+        '🚐',
+        '🛻',
+        '🚚',
+        '🚛',
+        '🚜',
+        '🏍️',
+        '🛵',
+        '🛺',
+        '🚲',
+        '🛴',
+        '🛹',
+        '🛼',
+        '🛷',
+        '🚏',
+        '🛣️',
+        '🛤️',
+        '🌍',
+        '🌎',
+        '🌏',
+        '🗺️',
+        '🧭',
+        '🏔️',
+        '⛰️',
+        '🌋',
+        '🗻',
+        '🏕️',
+        '🏖️',
+        '🏜️',
+        '🏝️',
+        '🏞️',
+        '🏟️',
+        '🏛️',
+        '🏗️',
+        '🏘️',
+        '🏠',
+        '🏡',
+        '🏢',
+        '🏣',
+        '🏤',
+        '🏥',
+        '🏦',
+        '🏨',
+        '🏩',
+        '🏪',
+        '🏫',
+        '🏬',
+        '🏭',
+        '🏯',
+        '🏰',
+        '🗼',
+        '🗽',
+        '🗾',
+        '🎌',
+        '🏳️',
+        '🏴',
+        '🚩',
       ],
       'Ăn uống': [
-        '🍏','🍎','🍊','🍋','🍌','🍍','🥭','🍇','🍓','🫐',
-        '🍈','🍒','🍑','🥝','🍅','🫒','🥥','🥑','🍆','🥔',
-        '🥕','🌽','🌶️','🫑','🥒','🥬','🥦','🧄','🧅','🥜',
-        '🫘','🍞','🥐','🥖','🫓','🥨','🥯','🧀','🥚','🍳',
-        '🧈','🥞','🧇','🥓','🥩','🍗','🍖','🦴','🌭','🍔',
-        '🍟','🍕','🫓','🌮','🌯','🫔','🥙','🧆','🥚','🍱',
-        '🍘','🍙','🍚','🍛','🍜','🍝','🍠','🍢','🍣','🍤',
-        '🍥','🥮','🍡','🥟','🥠','🥡','🦀','🦞','🦐','🦑',
-        '🦪','🍦','🍧','🍨','🍩','🍪','🎂','🍰','🧁','🥧',
-        '🍫','🍬','🍭','🍮','🍯','☕','🍵','🧃','🥤','🧋',
-        '🍶','🍾','🍷','🍸','🍹','🍺','🍻','🥂','🥃','🫗',
+        '🍏',
+        '🍎',
+        '🍊',
+        '🍋',
+        '🍌',
+        '🍍',
+        '🥭',
+        '🍇',
+        '🍓',
+        '🫐',
+        '🍈',
+        '🍒',
+        '🍑',
+        '🥝',
+        '🍅',
+        '🫒',
+        '🥥',
+        '🥑',
+        '🍆',
+        '🥔',
+        '🥕',
+        '🌽',
+        '🌶️',
+        '🫑',
+        '🥒',
+        '🥬',
+        '🥦',
+        '🧄',
+        '🧅',
+        '🥜',
+        '🫘',
+        '🍞',
+        '🥐',
+        '🥖',
+        '🫓',
+        '🥨',
+        '🥯',
+        '🧀',
+        '🥚',
+        '🍳',
+        '🧈',
+        '🥞',
+        '🧇',
+        '🥓',
+        '🥩',
+        '🍗',
+        '🍖',
+        '🦴',
+        '🌭',
+        '🍔',
+        '🍟',
+        '🍕',
+        '🫓',
+        '🌮',
+        '🌯',
+        '🫔',
+        '🥙',
+        '🧆',
+        '🥚',
+        '🍱',
+        '🍘',
+        '🍙',
+        '🍚',
+        '🍛',
+        '🍜',
+        '🍝',
+        '🍠',
+        '🍢',
+        '🍣',
+        '🍤',
+        '🍥',
+        '🥮',
+        '🍡',
+        '🥟',
+        '🥠',
+        '🥡',
+        '🦀',
+        '🦞',
+        '🦐',
+        '🦑',
+        '🦪',
+        '🍦',
+        '🍧',
+        '🍨',
+        '🍩',
+        '🍪',
+        '🎂',
+        '🍰',
+        '🧁',
+        '🥧',
+        '🍫',
+        '🍬',
+        '🍭',
+        '🍮',
+        '🍯',
+        '☕',
+        '🍵',
+        '🧃',
+        '🥤',
+        '🧋',
+        '🍶',
+        '🍾',
+        '🍷',
+        '🍸',
+        '🍹',
+        '🍺',
+        '🍻',
+        '🥂',
+        '🥃',
+        '🫗',
       ],
       'Hoạt động': [
-        '⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱',
-        '🪀','🏓','🏸','🏒','🥍','🏏','🪃','🥅','⛳','🪁',
-        '🤿','🎣','🤸','🤼','🤺','🤾','⛷️','🏂','🏋️','🚵',
-        '🚴','🏊','🤽','🧗','🏇','🏆','🥇','🥈','🥉','🎖️',
-        '🎗️','🏅','🎫','🎟️','🎪','🎭','🎨','🖼️','🎰','🎲',
-        '🧩','🎮','🕹️','🎯','🎳',
+        '⚽',
+        '🏀',
+        '🏈',
+        '⚾',
+        '🥎',
+        '🎾',
+        '🏐',
+        '🏉',
+        '🥏',
+        '🎱',
+        '🪀',
+        '🏓',
+        '🏸',
+        '🏒',
+        '🥍',
+        '🏏',
+        '🪃',
+        '🥅',
+        '⛳',
+        '🪁',
+        '🤿',
+        '🎣',
+        '🤸',
+        '🤼',
+        '🤺',
+        '🤾',
+        '⛷️',
+        '🏂',
+        '🏋️',
+        '🚵',
+        '🚴',
+        '🏊',
+        '🤽',
+        '🧗',
+        '🏇',
+        '🏆',
+        '🥇',
+        '🥈',
+        '🥉',
+        '🎖️',
+        '🎗️',
+        '🏅',
+        '🎫',
+        '🎟️',
+        '🎪',
+        '🎭',
+        '🎨',
+        '🖼️',
+        '🎰',
+        '🎲',
+        '🧩',
+        '🎮',
+        '🕹️',
+        '🎯',
+        '🎳',
       ],
       'Ký hiệu & khác': [
-        '❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔',
-        '❤️‍🔥','❤️‍🩹','💕','💞','💓','💗','💖','💘','💝','💟',
-        '☮️','✝️','☪️','🕉️','✡️','🔯','🕎','☯️','☦️','🛐',
-        '⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓',
-        '🆔','⚛️','🉑','☢️','☣️','📵','🚫','⛔','🔞','📛',
-        '🔰','⭕','✅','☑️','✔️','❎','🔱','🔲','🔳','⬛',
-        '⬜','◼️','◻️','◾','◽','▪️','▫️','🔺','🔻','💠',
-        '🔘','🔵','🟣','⚫','🟤','🔴','🟠','🟡','🟢','🔶',
-        '🔷','🔸','🔹','🔊','🔔','🔕','🎵','🎶','💡','🔦',
-        '🕯️','💰','💵','💴','💶','💷','💸','💳','🪙','💹',
-        '✉️','📧','📨','📩','📤','📥','📦','📫','📪','📬',
-        '📭','📮','🗳️','✏️','✒️','🖊️','🖋️','📝','📁','📂',
-        '🗂️','📅','📆','🗒️','🗓️','📇','📈','📉','📊','📋',
-        '📌','📍','🗺️','📎','🖇️','✂️','🗃️','🗄️','🗑️','🔒',
-        '🔓','🔏','🔐','🔑','🗝️','🔨','🪓','⛏️','⚒️','🛠️',
-        '🗡️','⚔️','🛡️','🪃','🔧','🪛','🔩','⚙️','🗜️','⚖️',
-        '🪝','🔗','⛓️','🪤','🧲','🔋','🪫','🔌','💻','🖥️',
-        '🖨️','⌨️','🖱️','🖲️','💾','💿','📀','🧮','🎥','🎞️',
-        '📽️','🎬','📺','📷','📸','📹','📼','🔍','🔎','🕯️',
-        '💡','🔦','🏮','🪔','📡','🔭','🔬','🩺','🩻','🩹',
-        '💊','🩸','🧬','🦠','🧫','🧪','⚗️','🛁','🚿','🪥',
-        '🧴','🧷','🧹','🧺','🧻','🪣','🧼','🫧','🪒','🧽',
-        '🪜','🛒','🚪','🪞','🪟','🛏️','🛋️','🚽','🪠','🚰',
+        '❤️',
+        '🧡',
+        '💛',
+        '💚',
+        '💙',
+        '💜',
+        '🖤',
+        '🤍',
+        '🤎',
+        '💔',
+        '❤️‍🔥',
+        '❤️‍🩹',
+        '💕',
+        '💞',
+        '💓',
+        '💗',
+        '💖',
+        '💘',
+        '💝',
+        '💟',
+        '☮️',
+        '✝️',
+        '☪️',
+        '🕉️',
+        '✡️',
+        '🔯',
+        '🕎',
+        '☯️',
+        '☦️',
+        '🛐',
+        '⛎',
+        '♈',
+        '♉',
+        '♊',
+        '♋',
+        '♌',
+        '♍',
+        '♎',
+        '♏',
+        '♐',
+        '♑',
+        '♒',
+        '♓',
+        '🆔',
+        '⚛️',
+        '🉑',
+        '☢️',
+        '☣️',
+        '📵',
+        '🚫',
+        '⛔',
+        '🔞',
+        '📛',
+        '🔰',
+        '⭕',
+        '✅',
+        '☑️',
+        '✔️',
+        '❎',
+        '🔱',
+        '🔲',
+        '🔳',
+        '⬛',
+        '⬜',
+        '◼️',
+        '◻️',
+        '◾',
+        '◽',
+        '▪️',
+        '▫️',
+        '🔺',
+        '🔻',
+        '💠',
+        '🔘',
+        '🔵',
+        '🟣',
+        '⚫',
+        '🟤',
+        '🔴',
+        '🟠',
+        '🟡',
+        '🟢',
+        '🔶',
+        '🔷',
+        '🔸',
+        '🔹',
+        '🔊',
+        '🔔',
+        '🔕',
+        '🎵',
+        '🎶',
+        '💡',
+        '🔦',
+        '🕯️',
+        '💰',
+        '💵',
+        '💴',
+        '💶',
+        '💷',
+        '💸',
+        '💳',
+        '🪙',
+        '💹',
+        '✉️',
+        '📧',
+        '📨',
+        '📩',
+        '📤',
+        '📥',
+        '📦',
+        '📫',
+        '📪',
+        '📬',
+        '📭',
+        '📮',
+        '🗳️',
+        '✏️',
+        '✒️',
+        '🖊️',
+        '🖋️',
+        '📝',
+        '📁',
+        '📂',
+        '🗂️',
+        '📅',
+        '📆',
+        '🗒️',
+        '🗓️',
+        '📇',
+        '📈',
+        '📉',
+        '📊',
+        '📋',
+        '📌',
+        '📍',
+        '🗺️',
+        '📎',
+        '🖇️',
+        '✂️',
+        '🗃️',
+        '🗄️',
+        '🗑️',
+        '🔒',
+        '🔓',
+        '🔏',
+        '🔐',
+        '🔑',
+        '🗝️',
+        '🔨',
+        '🪓',
+        '⛏️',
+        '⚒️',
+        '🛠️',
+        '🗡️',
+        '⚔️',
+        '🛡️',
+        '🪃',
+        '🔧',
+        '🪛',
+        '🔩',
+        '⚙️',
+        '🗜️',
+        '⚖️',
+        '🪝',
+        '🔗',
+        '⛓️',
+        '🪤',
+        '🧲',
+        '🔋',
+        '🪫',
+        '🔌',
+        '💻',
+        '🖥️',
+        '🖨️',
+        '⌨️',
+        '🖱️',
+        '🖲️',
+        '💾',
+        '💿',
+        '📀',
+        '🧮',
+        '🎥',
+        '🎞️',
+        '📽️',
+        '🎬',
+        '📺',
+        '📷',
+        '📸',
+        '📹',
+        '📼',
+        '🔍',
+        '🔎',
+        '🕯️',
+        '💡',
+        '🔦',
+        '🏮',
+        '🪔',
+        '📡',
+        '🔭',
+        '🔬',
+        '🩺',
+        '🩻',
+        '🩹',
+        '💊',
+        '🩸',
+        '🧬',
+        '🦠',
+        '🧫',
+        '🧪',
+        '⚗️',
+        '🛁',
+        '🚿',
+        '🪥',
+        '🧴',
+        '🧷',
+        '🧹',
+        '🧺',
+        '🧻',
+        '🪣',
+        '🧼',
+        '🫧',
+        '🪒',
+        '🧽',
+        '🪜',
+        '🛒',
+        '🚪',
+        '🪞',
+        '🪟',
+        '🛏️',
+        '🛋️',
+        '🚽',
+        '🪠',
+        '🚰',
       ],
     };
 
@@ -1611,7 +2246,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                       // Handle
                       Container(
                         margin: const EdgeInsets.only(top: 12, bottom: 4),
-                        width: 40, height: 4,
+                        width: 40,
+                        height: 4,
                         decoration: BoxDecoration(
                           color: Colors.grey[300],
                           borderRadius: BorderRadius.circular(4),
@@ -1623,8 +2259,15 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                         child: GestureDetector(
                           onTap: () => Navigator.pop(ctx),
                           child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                            child: Icon(Icons.close, size: 22, color: Colors.black54),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 6,
+                            ),
+                            child: Icon(
+                              Icons.close,
+                              size: 22,
+                              color: Colors.black54,
+                            ),
                           ),
                         ),
                       ),
@@ -1636,7 +2279,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           children: emojiCategories.keys.map((cat) {
                             final icons = const {
-                              'Mặt cười & cảm xúc': Icons.sentiment_satisfied_alt,
+                              'Mặt cười & cảm xúc':
+                                  Icons.sentiment_satisfied_alt,
                               'Con người & cơ thể': Icons.accessibility_new,
                               'Du lịch & địa điểm': Icons.flight,
                               'Ăn uống': Icons.restaurant,
@@ -1645,12 +2289,18 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                             };
                             final bool active = selectedCategory == cat;
                             return GestureDetector(
-                              onTap: () => setInner(() => selectedCategory = cat),
+                              onTap: () =>
+                                  setInner(() => selectedCategory = cat),
                               child: Container(
                                 margin: const EdgeInsets.only(right: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: active ? AppTheme.primary : Colors.transparent,
+                                  color: active
+                                      ? AppTheme.primary
+                                      : Colors.transparent,
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Icon(
@@ -1684,30 +2334,35 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                       Expanded(
                         child: GridView.builder(
                           padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 8,
-                            childAspectRatio: 1,
-                            crossAxisSpacing: 4,
-                            mainAxisSpacing: 4,
-                          ),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 8,
+                                childAspectRatio: 1,
+                                crossAxisSpacing: 4,
+                                mainAxisSpacing: 4,
+                              ),
                           itemCount: emojis.length,
                           itemBuilder: (_, i) {
                             final emoji = emojis[i];
-                            final alreadySelected = currentReactions.contains(emoji);
+                            final alreadySelected = currentReactions.contains(
+                              emoji,
+                            );
                             return GestureDetector(
                               onTap: () {
                                 List<dynamic> updated;
                                 if (alreadySelected) {
-                                  updated = List.from(currentReactions)..remove(emoji);
+                                  updated = List.from(currentReactions)
+                                    ..remove(emoji);
                                 } else {
-                                  updated = List.from(currentReactions)..add(emoji);
+                                  updated = List.from(currentReactions)
+                                    ..add(emoji);
                                 }
                                 DatabaseService()
                                     .updateSavedItemReactions(noteId, updated)
                                     .then((_) {
-                                  _loadData(silent: true);
-                                  Navigator.pop(ctx);
-                                });
+                                      _loadData(silent: true);
+                                      Navigator.pop(ctx);
+                                    });
                               },
                               child: Container(
                                 decoration: alreadySelected
@@ -1720,7 +2375,10 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                       )
                                     : null,
                                 child: Center(
-                                  child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                                  child: Text(
+                                    emoji,
+                                    style: const TextStyle(fontSize: 22),
+                                  ),
                                 ),
                               ),
                             );
@@ -1928,10 +2586,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
 
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.border),
-                ),
+                decoration: AppTheme.premiumCardDecoration(radius: 16),
                 child: Material(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
@@ -2049,7 +2704,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                   child: Container(
                                     height: 48,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFF1F5F9),
+                                      color: AppTheme.surfaceVariant,
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: TextField(
@@ -2059,7 +2714,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                       decoration: const InputDecoration(
                                         hintText: 'Thêm địa điểm',
                                         hintStyle: TextStyle(
-                                          color: Colors.black38,
+                                          color: AppTheme.hintText,
                                           fontSize: 13,
                                         ),
                                         prefixIcon: Icon(
@@ -2082,7 +2737,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                     height: 48,
                                     width: 48,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFF1F5F9),
+                                      color: AppTheme.surfaceVariant,
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: const Icon(
@@ -2099,7 +2754,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                     height: 48,
                                     width: 48,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFF1F5F9),
+                                      color: AppTheme.surfaceVariant,
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: const Icon(
@@ -2306,7 +2961,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
             children: [
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF5247),
+                  backgroundColor: AppTheme.primary,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(24),
@@ -2955,7 +3610,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                         decoration: BoxDecoration(
                           color: progress > 1.0
                               ? Colors.redAccent
-                              : const Color(0xFFFF5247),
+                              : AppTheme.primary,
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -3001,11 +3656,11 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                 style: AppTheme.sectionTitleStyle,
               ),
               TextButton.icon(
-                icon: const Icon(Icons.add, size: 16, color: Color(0xFFFF5247)),
+                icon: const Icon(Icons.add, size: 16, color: AppTheme.primary),
                 label: const Text(
                   'Thêm chi phí',
                   style: TextStyle(
-                    color: Color(0xFFFF5247),
+                    color: AppTheme.primary,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -3112,7 +3767,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                   children: [
                     const Icon(
                       Icons.credit_card_rounded,
-                      color: Color(0xFFFF5247),
+                      color: AppTheme.primary,
                       size: 20,
                     ),
                     const SizedBox(width: 12),
@@ -3183,7 +3838,8 @@ class _ChecklistTemplateSheet extends StatefulWidget {
   });
 
   @override
-  State<_ChecklistTemplateSheet> createState() => _ChecklistTemplateSheetState();
+  State<_ChecklistTemplateSheet> createState() =>
+      _ChecklistTemplateSheetState();
 }
 
 class _ChecklistTemplateSheetState extends State<_ChecklistTemplateSheet>
@@ -3276,10 +3932,7 @@ class _ChecklistTemplateSheetState extends State<_ChecklistTemplateSheet>
                   child: Text(
                     'Thêm từ một mẫu',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                 ),
                 GestureDetector(
@@ -3375,11 +4028,16 @@ class _ChecklistTemplateSheetState extends State<_ChecklistTemplateSheet>
                 });
               },
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
                 child: Row(
                   children: [
                     Icon(
-                      isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                      isExpanded
+                          ? Icons.keyboard_arrow_down
+                          : Icons.keyboard_arrow_right,
                       color: Colors.black54,
                       size: 20,
                     ),
@@ -3412,10 +4070,16 @@ class _ChecklistTemplateSheetState extends State<_ChecklistTemplateSheet>
                             color: isSelected ? AppTheme.primary : Colors.grey,
                             width: isSelected ? 0 : 1.5,
                           ),
-                          color: isSelected ? AppTheme.primary : Colors.transparent,
+                          color: isSelected
+                              ? AppTheme.primary
+                              : Colors.transparent,
                         ),
                         child: isSelected
-                            ? const Icon(Icons.check, color: Colors.white, size: 16)
+                            ? const Icon(
+                                Icons.check,
+                                color: Colors.white,
+                                size: 16,
+                              )
                             : null,
                       ),
                     ),
@@ -3427,14 +4091,21 @@ class _ChecklistTemplateSheetState extends State<_ChecklistTemplateSheet>
               ...items.map((item) {
                 final itemName = item['name'] as String;
                 return Padding(
-                  padding: const EdgeInsets.only(left: 48, right: 20, bottom: 8),
+                  padding: const EdgeInsets.only(
+                    left: 48,
+                    right: 20,
+                    bottom: 8,
+                  ),
                   child: Row(
                     children: [
                       const Icon(Icons.circle, size: 6, color: Colors.grey),
                       const SizedBox(width: 10),
                       Text(
                         itemName,
-                        style: const TextStyle(fontSize: 13, color: Colors.black87),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                        ),
                       ),
                     ],
                   ),
