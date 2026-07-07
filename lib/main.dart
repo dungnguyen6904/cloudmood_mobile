@@ -11,8 +11,8 @@ import 'services/database_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Load environment variables from assets/env
-  await dotenv.load(fileName: "assets/env");
+  // Load environment variables from .env
+  await dotenv.load(fileName: ".env");
   
   await Supabase.initialize(
     url: 'https://mrulzaiktzljosdgfivt.supabase.co',
