@@ -167,6 +167,7 @@ class _CloudmoodRegisterScreenState extends State<CloudmoodRegisterScreen>
         children: [
           // ── Top gradient banner ──────────────────────────────────
           Container(
+            width: double.infinity,
             height: size.height * 0.28,
             decoration: const BoxDecoration(
               gradient: AppTheme.heroGradient,
@@ -196,6 +197,7 @@ class _CloudmoodRegisterScreenState extends State<CloudmoodRegisterScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 16),
+                        // Back button
                         GestureDetector(
                           onTap: () => Navigator.of(context).pop(),
                           child: Container(
@@ -211,22 +213,6 @@ class _CloudmoodRegisterScreenState extends State<CloudmoodRegisterScreen>
                             ),
                           ),
                         ),
-                        const Spacer(),
-                        const Text(
-                          'Tạo tài khoản',
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: -0.8,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Bắt đầu hành trình của bạn cùng cloudmood',
-                          style: TextStyle(fontSize: 13, color: Colors.white70),
-                        ),
-                        const SizedBox(height: 24),
                       ],
                     ),
                   ),
@@ -242,7 +228,31 @@ class _CloudmoodRegisterScreenState extends State<CloudmoodRegisterScreen>
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 children: [
-                  SizedBox(height: size.height * 0.24),
+                  SizedBox(height: size.height * 0.10),
+
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Tạo tài khoản',
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: -0.8,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Bắt đầu hành trình của bạn cùng cloudmood',
+                          style: TextStyle(fontSize: 13, color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
 
                   FadeTransition(
                     opacity: _fadeIn,

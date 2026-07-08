@@ -218,6 +218,7 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen>
         children: [
           // ── Hero gradient banner ──────────────────────────────────
           Container(
+            width: double.infinity,
             height: size.height * 0.38,
             decoration: const BoxDecoration(
               gradient: AppTheme.heroGradient,
@@ -277,24 +278,59 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen>
                             ),
                           ),
                         ),
-                        const Spacer(),
-                        // Brand
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: AppTheme.glassDecoration(
-                                opacity: 0.25,
-                                radius: 14,
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Scrollable content ────────────────────────────────────
+          SafeArea(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    SizedBox(height: size.height * 0.15),
+
+                    // Brand (moved here so it scrolls with the form)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withAlpha(50),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.white.withAlpha(100),
+                                width: 1,
                               ),
-                              child: const Icon(
-                                Icons.cloud_rounded,
-                                color: Colors.white,
-                                size: 28,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withAlpha(20),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(13),
+                              child: Image.asset(
+                                'assets/images/logo-cloudmood-new.png',
+                                width: 48,
+                                height: 48,
+                                fit: BoxFit.cover,
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            const Column(
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
@@ -316,26 +352,11 @@ class _CloudmoodLoginScreenState extends State<CloudmoodLoginScreen>
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ── Scrollable content ────────────────────────────────────
-          SafeArea(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  children: [
-                    SizedBox(height: size.height * 0.35),
+                    const SizedBox(height: 32),
 
                     // ── Login card ──────────────────────────────────
                     FadeTransition(

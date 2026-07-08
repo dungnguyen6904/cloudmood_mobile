@@ -94,16 +94,13 @@ class HeaderWidget extends StatelessWidget {
           // Logo
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.cloud_rounded,
-                  color: Colors.white,
-                  size: 20,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.asset(
+                  'assets/images/logo-cloudmood-new.png',
+                  width: 32,
+                  height: 32,
+                  fit: BoxFit.cover,
                 ),
               ),
               const SizedBox(width: 8),
