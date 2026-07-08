@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_map/flutter_map.dart';
@@ -8,7 +9,9 @@ import 'package:latlong2/latlong.dart';
 import '../services/database_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/section_style_sheet.dart';
+import '../widgets/itinerary_style_sheet.dart';
 import 'trip_ai_chat_screen.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
 class TripOverviewScreen extends StatefulWidget {
   final Map<String, dynamic> itinerary;
@@ -67,6 +70,14 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
   // Expense Tab custom items
   List<Map<String, dynamic>> _customExpenses = [];
 
+  // Itinerary Tab custom items
+  final Map<int, String> _daySubtitles = {};
+  final Map<int, Color> _dayColors = {};
+  final Map<int, bool> _dayCollapsed = {};
+  int _activeDayIndex = 0;
+  late final ScrollController _itineraryScrollController = ScrollController();
+  final Map<int, GlobalKey> _dayKeys = {};
+
   // Map state
   bool _isMapExpanded = false;
   LatLng? _mapCenter;
@@ -77,6 +88,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
   bool _isGeneratingAI = false;
   OverlayEntry? _currentNotification;
   int? _editingNoteId;
+  String? _focusedTodoItemKey;
 
   @override
   void initState() {
@@ -91,6 +103,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     _currentNotification?.remove();
     _currentNotification = null;
     _tabController.dispose();
+    _itineraryScrollController.dispose();
     for (var controller in _searchControllers.values) {
       controller.dispose();
     }
@@ -166,6 +179,45 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
             _sectionIcons.addAll(newIcons);
           });
           _syncSectionsToDatabase();
+        },
+      ),
+    );
+  }
+
+  void _showItineraryStyleSheet(
+    BuildContext context, {
+    int initialTabIndex = 0,
+    int initialDayIndex = 0,
+  }) {
+    final int totalDays = (_itineraryData['days'] as num?)?.toInt() ?? 1;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ItineraryStyleSheet(
+        daysCount: totalDays,
+        details: _details,
+        dayColors: _dayColors,
+        initialTabIndex: initialTabIndex,
+        initialDayIndex: initialDayIndex,
+        onSaved: (newDetails, newColors) async {
+          setState(() {
+            _dayColors.clear();
+            _dayColors.addAll(newColors);
+            _details = newDetails;
+          });
+
+          await _saveDayColors();
+
+          for (var p in _details) {
+            await DatabaseService().updateItineraryDetail(p['id'] as int, {
+              'day': p['day'],
+              'sortOrder': p['sortOrder'],
+            });
+          }
+
+          await _loadData(silent: true);
         },
       ),
     );
@@ -338,9 +390,21 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     final refreshed = await DatabaseService().fetchItineraryById(itineraryId);
     if (refreshed != null) {
       _itineraryData = refreshed;
-      _details = List<Map<String, dynamic>>.from(
+      final rawDetails = List<Map<String, dynamic>>.from(
         refreshed['ItineraryDetail'] ?? [],
       );
+      rawDetails.sort((a, b) {
+        final int orderA = a['sortOrder'] ?? 0;
+        final int orderB = b['sortOrder'] ?? 0;
+        if (orderA != orderB) {
+          return orderA.compareTo(orderB);
+        }
+        final int idA = a['id'] ?? 0;
+        final int idB = b['id'] ?? 0;
+        return idA.compareTo(idB);
+      });
+      _details = rawDetails;
+
       final rawSaved = List<Map<String, dynamic>>.from(
         refreshed['ItinerarySavedPlace'] ?? [],
       );
@@ -389,10 +453,10 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
       }
     }
 
-    // Ensure any section that has saved places is in _sectionNames
+    // Ensure any section that has saved places is in _sectionNames (excluding day-based sections)
     for (var place in _savedPlaces) {
       final section = place['section'] as String?;
-      if (section != null && !_sectionNames.contains(section)) {
+      if (section != null && !_sectionNames.contains(section) && !section.startsWith('Ngày ')) {
         _sectionNames.add(section);
         _searchControllers.putIfAbsent(section, () => TextEditingController());
         _searchResults.putIfAbsent(section, () => []);
@@ -418,6 +482,33 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
       }
     }
 
+    final daySubtitlesStr = prefs.getString('day_subtitles_$itineraryId');
+    _daySubtitles.clear();
+    if (daySubtitlesStr != null) {
+      try {
+        final Map<String, dynamic> parsed = json.decode(daySubtitlesStr);
+        parsed.forEach((k, v) {
+          _daySubtitles[int.parse(k)] = v as String;
+        });
+      } catch (e) {
+        debugPrint('Error loading day subtitles: $e');
+      }
+    }
+
+    final dayConfigs = _itineraryData['dayConfigs'] as Map<String, dynamic>?;
+    _dayColors.clear();
+    if (dayConfigs != null) {
+      try {
+        dayConfigs.forEach((k, v) {
+          if (v is Map && v['color'] != null) {
+            _dayColors[int.parse(k)] = Color(int.parse(v['color'].toString()));
+          }
+        });
+      } catch (e) {
+        debugPrint('Error loading day colors from dayConfigs: $e');
+      }
+    }
+
     if (mounted) {
       setState(() {
         if (!silent) {
@@ -425,6 +516,331 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
         }
       });
     }
+  }
+
+  Future<void> _saveDaySubtitles() async {
+    final prefs = await SharedPreferences.getInstance();
+    final itineraryId = _itineraryData['id'] as int;
+    final Map<String, String> dataToSave = {};
+    _daySubtitles.forEach((k, v) {
+      dataToSave[k.toString()] = v;
+    });
+    await prefs.setString('day_subtitles_$itineraryId', json.encode(dataToSave));
+  }
+
+  Future<void> _saveDayColors() async {
+    final itineraryId = _itineraryData['id'] as int;
+    final Map<String, dynamic> dataToSave = {};
+    _dayColors.forEach((k, v) {
+      dataToSave[k.toString()] = {'color': v.value.toString()};
+    });
+    
+    // Call database to save
+    await DatabaseService().updateItineraryDayConfigs(itineraryId, dataToSave);
+  }
+
+  String _getDayLabel(int dayIndex) {
+    final startStr = _itineraryData['startDate'] as String?;
+    if (startStr == null) {
+      return 'Ngày ${dayIndex + 1}';
+    }
+    final startDate = DateTime.tryParse(startStr);
+    if (startDate == null) {
+      return 'Ngày ${dayIndex + 1}';
+    }
+    final date = startDate.add(Duration(days: dayIndex));
+    final weekday = date.weekday;
+    String weekdayStr = '';
+    switch (weekday) {
+      case DateTime.monday: weekdayStr = 'T2'; break;
+      case DateTime.tuesday: weekdayStr = 'T3'; break;
+      case DateTime.wednesday: weekdayStr = 'T4'; break;
+      case DateTime.thursday: weekdayStr = 'T5'; break;
+      case DateTime.friday: weekdayStr = 'T6'; break;
+      case DateTime.saturday: weekdayStr = 'T7'; break;
+      case DateTime.sunday: weekdayStr = 'CN'; break;
+    }
+    return '$weekdayStr ${date.day}/${date.month}';
+  }
+
+  Future<void> _insertDayAfter(int dayIndex) async {
+    final itineraryId = _itineraryData['id'] as int;
+    final int targetDay = dayIndex + 1; // Insert after this day
+    
+    // Shift days in DB
+    await DatabaseService().shiftItineraryDetailsDays(
+      itineraryId: itineraryId,
+      targetDay: targetDay,
+      offset: 1,
+    );
+    
+    // Update itinerary total days
+    final currentDays = (_itineraryData['days'] as num?)?.toInt() ?? 1;
+    await DatabaseService().updateItinerary(itineraryId, {'days': currentDays + 1});
+    await _loadData();
+  }
+
+  Future<void> _deleteDay(int dayIndex) async {
+    final itineraryId = _itineraryData['id'] as int;
+    final int targetDay = dayIndex + 1;
+    
+    // Delete details belonging to targetDay
+    await DatabaseService().deleteItineraryDetailsForDay(
+      itineraryId: itineraryId,
+      day: targetDay,
+    );
+    
+    // Shift day numbers down for details after targetDay
+    await DatabaseService().shiftItineraryDetailsDays(
+      itineraryId: itineraryId,
+      targetDay: targetDay,
+      offset: -1,
+    );
+    
+    // Update itinerary total days
+    final currentDays = (_itineraryData['days'] as num?)?.toInt() ?? 1;
+    if (currentDays > 1) {
+      await DatabaseService().updateItinerary(itineraryId, {'days': currentDays - 1});
+    }
+    await _loadData();
+  }
+
+  Future<void> _changeTripStartDate() async {
+    final currentStartStr = _itineraryData['startDate'] as String?;
+    final currentDays = (_itineraryData['days'] as num?)?.toInt() ?? 1;
+    final currentStart = currentStartStr != null ? DateTime.tryParse(currentStartStr) : DateTime.now();
+    final currentEnd = currentStart?.add(Duration(days: currentDays > 0 ? currentDays - 1 : 0));
+
+    final picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: currentStart != null && currentEnd != null
+          ? DateTimeRange(start: currentStart, end: currentEnd)
+          : null,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppTheme.primary,
+              onPrimary: Colors.white,
+              onSurface: AppTheme.darkText,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      final itId = _itineraryData['id'] as int;
+      final newDays = picked.end.difference(picked.start).inDays + 1;
+      
+      await DatabaseService().updateItinerary(itId, {
+        'startDate': picked.start.toIso8601String().substring(0, 10),
+        'days': newDays,
+      });
+      await _loadData();
+    }
+  }
+
+  void _showDayOptionsSheet(int dayIndex) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined, color: AppTheme.darkText),
+                  title: const Text('Chỉnh sửa tiêu đề phụ'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _editDaySubtitle(dayIndex);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.palette_outlined, color: AppTheme.darkText),
+                  title: const Text('Thay đổi màu sắc'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showItineraryStyleSheet(context, initialTabIndex: 0, initialDayIndex: dayIndex);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.unfold_less_rounded, color: AppTheme.darkText),
+                  title: const Text('Thu gọn tất cả các ngày'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() {
+                      final int totalDays = (_itineraryData['days'] as num?)?.toInt() ?? 1;
+                      for (int i = 0; i < totalDays; i++) {
+                        _dayCollapsed[i] = true;
+                      }
+                    });
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.playlist_add_rounded, color: AppTheme.darkText),
+                  title: const Text('Chèn ngày sau'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _insertDayAfter(dayIndex);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                  title: const Text('Xóa ngày', style: TextStyle(color: Colors.redAccent)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _deleteDay(dayIndex);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.menu_book_rounded, color: AppTheme.darkText),
+                  title: const Text('Thêm địa điểm vào nhật ký'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showPremiumNotification(
+                      title: 'Tính năng nâng cao',
+                      message: 'Tính năng liên kết Nhật ký hành trình sẽ sớm khả dụng!',
+                      icon: Icons.info_outline_rounded,
+                      color: AppTheme.primary,
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.calendar_month_outlined, color: AppTheme.darkText),
+                  title: const Text('Thay đổi ngày chuyến đi'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _changeTripStartDate();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.sort_rounded, color: AppTheme.darkText),
+                  title: const Text('Sắp xếp lại các phần'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showItineraryStyleSheet(context, initialTabIndex: 1);
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _editDaySubtitle(int dayIndex) {
+    final controller = TextEditingController(text: _daySubtitles[dayIndex] ?? '');
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            'Nhập tiêu đề phụ cho ${_getDayLabel(dayIndex)}',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: TextField(
+            controller: controller,
+            decoration: AppTheme.inputDecoration(
+              hintText: 'Ví dụ: Tham quan bảo tàng, Nghỉ dưỡng...',
+              prefixIcon: Icons.edit_rounded,
+            ),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Hủy', style: TextStyle(color: AppTheme.subtitleText)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () {
+                final txt = controller.text.trim();
+                setState(() {
+                  _daySubtitles[dayIndex] = txt;
+                });
+                _saveDaySubtitles();
+                Navigator.pop(context);
+              },
+              child: const Text('Lưu'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _changeDayColor(int dayIndex) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Chọn màu sắc ngày', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: _availableColors.map((color) {
+                final isSelected = _dayColors[dayIndex] == color;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _dayColors[dayIndex] = color;
+                    });
+                    _saveDayColors();
+                    Navigator.pop(context);
+                  },
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: isSelected
+                          ? Border.all(color: Colors.black, width: 3)
+                          : Border.all(color: Colors.grey[300]!, width: 1),
+                      boxShadow: isSelected
+                          ? [BoxShadow(color: color.withOpacity(0.4), blurRadius: 8)]
+                          : null,
+                    ),
+                    child: isSelected
+                        ? const Icon(Icons.check, color: Colors.white, size: 20)
+                        : null,
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _syncSectionsToDatabase() async {
@@ -538,114 +954,117 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
   void _showAddPlaceDialog(Map<String, dynamic> place) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text(
-                  'Thêm "${place['name']}" vào chuyến đi',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  textAlign: TextAlign.center,
                 ),
-              ),
-              const Divider(),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
                   child: Text(
-                    'DANH SÁCH TỔNG QUAN',
-                    style: TextStyle(
+                    'Thêm "${place['name']}" vào chuyến đi',
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.subtitleText,
-                      fontSize: 12,
+                      fontSize: 16,
                     ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-              ),
-              ..._sectionNames.map((sec) {
-                return ListTile(
-                  leading: const Icon(
-                    Icons.folder_outlined,
-                    color: AppTheme.primary,
-                  ),
-                  title: Text(sec),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _addPlace(place, sec);
-                  },
-                );
-              }),
-              const Divider(),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'HÀNH TRÌNH THEO NGÀY',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.subtitleText,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(
-                height: 60,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: (_itineraryData['days'] as num?)?.toInt() ?? 1,
-                  itemBuilder: (context, idx) {
-                    final dayLabel = 'Ngày ${idx + 1}';
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 8,
+                const Divider(),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'DANH SÁCH TỔNG QUAN',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.subtitleText,
+                        fontSize: 12,
                       ),
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryPeach,
-                          foregroundColor: AppTheme.primary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                ..._sectionNames.map((sec) {
+                  return ListTile(
+                    leading: const Icon(
+                      Icons.folder_outlined,
+                      color: AppTheme.primary,
+                    ),
+                    title: Text(sec),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _addPlace(place, sec);
+                    },
+                  );
+                }),
+                const Divider(),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'HÀNH TRÌNH THEO NGÀY',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.subtitleText,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  height: 60,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: (_itineraryData['days'] as num?)?.toInt() ?? 1,
+                    itemBuilder: (context, idx) {
+                      final dayLabel = 'Ngày ${idx + 1}';
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 8,
+                        ),
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryPeach,
+                            foregroundColor: AppTheme.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
                           ),
-                          elevation: 0,
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _addPlace(place, dayLabel);
+                          },
+                          child: Text(
+                            dayLabel,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _addPlace(place, dayLabel);
-                        },
-                        child: Text(
-                          dayLabel,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-            ],
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
         );
       },
@@ -1132,9 +1551,26 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                               const Spacer(),
                               IconButton(
                                 icon: const Icon(
+                                  Icons.copy_rounded,
+                                  color: Colors.black87,
+                                ),
+                                tooltip: 'Sao chép đến...',
+                                onPressed: () => _showSelectSectionBottomSheet(isCopy: true),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.drive_file_move_outline,
+                                  color: Colors.black87,
+                                ),
+                                tooltip: 'Di chuyển đến...',
+                                onPressed: () => _showSelectSectionBottomSheet(isCopy: false),
+                              ),
+                              IconButton(
+                                icon: const Icon(
                                   Icons.delete_outline_rounded,
                                   color: Colors.black87,
                                 ),
+                                tooltip: 'Xóa',
                                 onPressed: _deleteSelectedItems,
                               ),
                               IconButton(
@@ -1416,7 +1852,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                   const SizedBox(height: 8),
                                   FloatingActionButton(
                                     heroTag: 'add_btn',
-                                    onPressed: () {
+                                    onPressed: () async {
                                       if (_tabController.index == 3) {
                                         _showAddExpenseDialog();
                                       } else if (_tabController.index == 2) {
@@ -1427,11 +1863,26 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                           icon: Icons.info_outline_rounded,
                                           color: AppTheme.primary,
                                         );
+                                      } else if (_tabController.index == 1) {
+                                        final currentDays = (_itineraryData['days'] as num?)?.toInt() ?? 1;
+                                        final success = await DatabaseService().updateItinerary(
+                                          _itineraryData['id'] as int,
+                                          {'days': currentDays + 1},
+                                        );
+                                        if (success) {
+                                          _showPremiumNotification(
+                                            title: 'Đã thêm ngày',
+                                            message: 'Đã thêm Ngày ${currentDays + 1} vào lịch trình.',
+                                            icon: Icons.calendar_today_rounded,
+                                            color: AppTheme.green,
+                                          );
+                                          await _loadData();
+                                        }
                                       } else {
                                         _createNewSection();
                                       }
                                     },
-                                    backgroundColor: AppTheme.primary,
+                                    backgroundColor: AppTheme.darkText,
                                     child: const Icon(
                                       Icons.add,
                                       color: Colors.white,
@@ -1455,21 +1906,36 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
 
   Future<void> _addNoteInline(String section) async {
     final itineraryId = _itineraryData['id'] as int;
-    final sectionDetails = _savedPlaces
-        .where((d) => d['section'] == section)
-        .toList();
-    int maxOrder = 0;
-    for (var d in sectionDetails) {
-      final ord = d['sortOrder'] ?? 0;
-      if (ord > maxOrder) maxOrder = ord;
+    
+    dynamic result;
+    if (section.startsWith('Ngày ')) {
+      final int day = int.tryParse(section.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1;
+      final dayDetails = _details.where((d) => d['day'] == day).toList();
+      int maxOrder = 0;
+      for (var d in dayDetails) {
+        final ord = d['sortOrder'] ?? 0;
+        if (ord > maxOrder) maxOrder = ord;
+      }
+      result = await DatabaseService().addPlaceToItinerary(
+        itineraryId: itineraryId,
+        day: day,
+        noteText: 'Thêm ghi chú tại đây',
+        sortOrder: maxOrder + 1,
+      );
+    } else {
+      final sectionDetails = _savedPlaces.where((d) => d['section'] == section).toList();
+      int maxOrder = 0;
+      for (var d in sectionDetails) {
+        final ord = d['sortOrder'] ?? 0;
+        if (ord > maxOrder) maxOrder = ord;
+      }
+      result = await DatabaseService().addPlaceToSaved(
+        itineraryId: itineraryId,
+        section: section,
+        noteText: 'Thêm ghi chú tại đây',
+        sortOrder: maxOrder + 1,
+      );
     }
-
-    final result = await DatabaseService().addPlaceToSaved(
-      itineraryId: itineraryId,
-      section: section,
-      noteText: 'Thêm ghi chú tại đây',
-      sortOrder: maxOrder + 1,
-    );
 
     if (result != null) {
       setState(() {
@@ -1481,21 +1947,36 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
 
   Future<void> _addChecklistInline(String section) async {
     final itineraryId = _itineraryData['id'] as int;
-    final sectionDetails = _savedPlaces
-        .where((d) => d['section'] == section)
-        .toList();
-    int maxOrder = 0;
-    for (var d in sectionDetails) {
-      final ord = d['sortOrder'] ?? d['sortorder'] ?? 0;
-      if (ord > maxOrder) maxOrder = ord;
+    
+    dynamic result;
+    if (section.startsWith('Ngày ')) {
+      final int day = int.tryParse(section.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1;
+      final dayDetails = _details.where((d) => d['day'] == day).toList();
+      int maxOrder = 0;
+      for (var d in dayDetails) {
+        final ord = d['sortOrder'] ?? d['sortorder'] ?? 0;
+        if (ord > maxOrder) maxOrder = ord;
+      }
+      result = await DatabaseService().addPlaceToItinerary(
+        itineraryId: itineraryId,
+        day: day,
+        noteText: '[TODO] Danh sách công việc',
+        sortOrder: maxOrder + 1,
+      );
+    } else {
+      final sectionDetails = _savedPlaces.where((d) => d['section'] == section).toList();
+      int maxOrder = 0;
+      for (var d in sectionDetails) {
+        final ord = d['sortOrder'] ?? d['sortorder'] ?? 0;
+        if (ord > maxOrder) maxOrder = ord;
+      }
+      result = await DatabaseService().addPlaceToSaved(
+        itineraryId: itineraryId,
+        section: section,
+        noteText: '[TODO] Danh sách công việc',
+        sortOrder: maxOrder + 1,
+      );
     }
-
-    final result = await DatabaseService().addPlaceToSaved(
-      itineraryId: itineraryId,
-      section: section,
-      noteText: '[TODO] Danh sách công việc',
-      sortOrder: maxOrder + 1,
-    );
 
     if (result != null) {
       setState(() {
@@ -1505,7 +1986,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     }
   }
 
-  void _showTemplateBottomSheet(int checklistId, List<dynamic> currentItems) {
+  void _showTemplateBottomSheet(int checklistId, List<dynamic> currentItems, bool isItineraryDetail) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1526,9 +2007,10 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                 updated.add({'text': itemText, 'done': false});
               }
             }
-            final success = await DatabaseService().updateSavedItemTodoItems(
+            final success = await DatabaseService().updateNoteOrDetail(
               checklistId,
-              updated,
+              {'todoItems': updated},
+              isItineraryDetail,
             );
             if (success && mounted) {
               _loadData(silent: true);
@@ -1545,6 +2027,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     int listIdx,
     List<Map<String, dynamic>> sectionDetails,
   ) {
+    final bool isItineraryDetail = detail.containsKey('day');
     final String text = detail['noteText'] ?? detail['notetext'] ?? '';
     final bool isCollapsed =
         detail['isCollapsed'] == true || detail['iscollapsed'] == true;
@@ -1668,9 +2151,10 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                         : 'Ghi chú mới')
                                   : cleanVal;
                               if (isTodo) finalVal = '[TODO] $finalVal';
-                              await DatabaseService().updateSavedItemText(
+                              await DatabaseService().updateNoteOrDetail(
                                 id,
-                                finalVal,
+                                {'noteText': finalVal},
+                                isItineraryDetail,
                               );
                               setState(() => _editingNoteId = null);
                               await _loadData(silent: true);
@@ -1705,7 +2189,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                           ? (isTodo ? 'Danh sách công việc' : 'Ghi chú mới')
                           : cleanVal;
                       if (isTodo) finalVal = '[TODO] $finalVal';
-                      await DatabaseService().updateSavedItemText(id, finalVal);
+                      await DatabaseService().updateNoteOrDetail(id, {'noteText': finalVal}, isItineraryDetail);
                       setState(() => _editingNoteId = null);
                       await _loadData(silent: true);
                     },
@@ -1715,32 +2199,20 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                       size: 22,
                     ),
                   )
-                else if (isTodo)
-                  GestureDetector(
-                    onTap: () {
-                      final newDone = !allDone;
-                      final updated = todoList
-                          .map((item) => {...item as Map, 'done': newDone})
-                          .toList();
-                      DatabaseService()
-                          .updateSavedItemTodoItems(id, updated)
-                          .then((_) => _loadData(silent: true));
-                    },
-                    child: Icon(
-                      allDone ? Icons.check_box : Icons.check_box_outline_blank,
-                      color: allDone ? AppTheme.primary : AppTheme.subtitleText,
-                      size: 20,
-                    ),
-                  )
-                else if (isCollapsed)
+                else
                   GestureDetector(
                     onTap: () => DatabaseService()
-                        .updateSavedItemCollapse(id, false)
+                        .updateNoteOrDetail(id, {'isCollapsed': !isCollapsed}, isItineraryDetail)
                         .then((_) => _loadData(silent: true)),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: AppTheme.subtitleText,
-                      size: 20,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Icon(
+                        isCollapsed
+                            ? Icons.keyboard_arrow_down_rounded
+                            : Icons.keyboard_arrow_up_rounded,
+                        color: AppTheme.subtitleText,
+                        size: 20,
+                      ),
                     ),
                   ),
                 if (_isSelectionMode)
@@ -1757,16 +2229,34 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
               ],
             ),
 
-            // ── Todo items list (when not collapsed)
-            if (isTodo && todoList.isNotEmpty && !isCollapsed) ...[
+            // ── Todo items list
+            if (isTodo && todoList.isNotEmpty) ...[
               const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.only(left: 36),
-                child: Column(
-                  children: todoList.map((item) {
+                child: ReorderableListView(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  buildDefaultDragHandles: false,
+                  onReorder: (oldIndex, newIndex) {
+                    if (oldIndex < newIndex) newIndex -= 1;
+                    final updated = List.from(todoList);
+                    final item = updated.removeAt(oldIndex);
+                    updated.insert(newIndex, item);
+                    DatabaseService()
+                        .updateNoteOrDetail(id, {'todoItems': updated}, isItineraryDetail)
+                        .then((_) => _loadData(silent: true));
+                  },
+                  children: todoList.asMap().entries.map((entry) {
+                    final itemIdx = entry.key;
+                    final item = entry.value;
                     final String itemText = item['text'] ?? '';
                     final bool done = item['done'] == true;
+                    final String itemKey = '${id}_$itemText';
+                    final bool isFocused = _focusedTodoItemKey == itemKey;
+
                     return Padding(
+                      key: ValueKey(itemKey),
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Row(
                         children: [
@@ -1779,7 +2269,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                 return it;
                               }).toList();
                               DatabaseService()
-                                  .updateSavedItemTodoItems(id, updated)
+                                  .updateNoteOrDetail(id, {'todoItems': updated}, isItineraryDetail)
                                   .then((_) => _loadData(silent: true));
                             },
                             child: Icon(
@@ -1794,33 +2284,63 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Text(
-                              itemText,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: done
-                                    ? AppTheme.subtitleText
-                                    : AppTheme.darkText,
-                                decoration: done
-                                    ? TextDecoration.lineThrough
-                                    : null,
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (isFocused) {
+                                    _focusedTodoItemKey = null;
+                                  } else {
+                                    _focusedTodoItemKey = itemKey;
+                                  }
+                                });
+                              },
+                              child: Container(
+                                color: Colors.transparent,
+                                child: Text(
+                                  itemText,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: done
+                                        ? AppTheme.subtitleText
+                                        : AppTheme.darkText,
+                                    decoration: done
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                          GestureDetector(
-                            onTap: () {
-                              final updated = List.from(todoList)
-                                ..removeWhere((it) => it['text'] == itemText);
-                              DatabaseService()
-                                  .updateSavedItemTodoItems(id, updated)
-                                  .then((_) => _loadData(silent: true));
-                            },
-                            child: const Icon(
-                              Icons.close,
-                              size: 16,
-                              color: Colors.redAccent,
+                          if (isFocused) ...[
+                            GestureDetector(
+                              onTap: () {
+                                final updated = List.from(todoList)
+                                  ..removeWhere((it) => it['text'] == itemText);
+                                DatabaseService()
+                                    .updateNoteOrDetail(id, {'todoItems': updated}, isItineraryDetail)
+                                    .then((_) => _loadData(silent: true));
+                              },
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 4),
+                                child: Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 16,
+                                  color: Colors.redAccent,
+                                ),
+                              ),
                             ),
-                          ),
+                            ReorderableDragStartListener(
+                              index: itemIdx,
+                              child: const Padding(
+                                padding: EdgeInsets.only(left: 4),
+                                child: Icon(
+                                  Icons.drag_indicator_rounded,
+                                  size: 16,
+                                  color: AppTheme.subtitleText,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     );
@@ -1829,7 +2349,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
               ),
             ],
 
-            // ── Add todo item input (when not collapsed)
+            // ── Add todo item input
             if (isTodo && !isCollapsed) ...[
               const SizedBox(height: 4),
               Padding(
@@ -1861,7 +2381,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                             final updated = List.from(todoList)
                               ..add({'text': cleanVal, 'done': false});
                             DatabaseService()
-                                .updateSavedItemTodoItems(id, updated)
+                                .updateNoteOrDetail(id, {'todoItems': updated}, isItineraryDetail)
                                 .then((_) => _loadData(silent: true));
                           }
                         },
@@ -1883,7 +2403,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                     onTap: () {
                       final updated = List.from(reactions)..remove(emoji);
                       DatabaseService()
-                          .updateSavedItemReactions(id, updated)
+                          .updateNoteOrDetail(id, {'reactions': updated}, isItineraryDetail)
                           .then((_) => _loadData(silent: true));
                     },
                     child: _emojiChip(emoji as String),
@@ -1892,8 +2412,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
               ),
             ],
 
-            // ── Toolbar (shown when expanded OR always for todo)
-            if (!isCollapsed || isTodo) ...[
+            // ── Toolbar (shown when expanded)
+            if (!isCollapsed) ...[
               const SizedBox(height: 8),
               const Divider(color: AppTheme.border, height: 1, thickness: 0.5),
               const SizedBox(height: 8),
@@ -1904,7 +2424,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                     child: isTodo
                         // Todo left side: "Danh sách làm sẵn" button
                         ? GestureDetector(
-                            onTap: () => _showTemplateBottomSheet(id, todoList),
+                            onTap: () => _showTemplateBottomSheet(id, todoList, isItineraryDetail),
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -1937,7 +2457,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                     final updated = List.from(reactions)
                                       ..remove(emoji);
                                     DatabaseService()
-                                        .updateSavedItemReactions(id, updated)
+                                        .updateNoteOrDetail(id, {'reactions': updated}, isItineraryDetail)
                                         .then((_) => _loadData(silent: true));
                                   },
                                   child: _emojiChip(emoji as String),
@@ -1946,7 +2466,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                               // Emoji picker button
                               GestureDetector(
                                 onTap: () =>
-                                    _showEmojiPickerSheet(id, reactions),
+                                    _showEmojiPickerSheet(id, reactions, isItineraryDetail),
                                 child: Container(
                                   padding: const EdgeInsets.all(4),
                                   decoration: BoxDecoration(
@@ -1967,7 +2487,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                   // Right: delete, drag, collapse
                   GestureDetector(
                     onTap: () =>
-                        _removePlaceDetail(id, text, isSavedPlace: true),
+                        _removePlaceDetail(id, text, isSavedPlace: !isItineraryDetail),
                     child: const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 6),
                       child: Icon(
@@ -1988,21 +2508,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                       ),
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () => DatabaseService()
-                        .updateSavedItemCollapse(id, !isCollapsed)
-                        .then((_) => _loadData(silent: true)),
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 4, right: 2),
-                      child: Icon(
-                        isCollapsed
-                            ? Icons.keyboard_arrow_down_rounded
-                            : Icons.keyboard_arrow_up_rounded,
-                        color: AppTheme.subtitleText,
-                        size: 20,
-                      ),
-                    ),
-                  ),
+
                 ],
               ),
             ],
@@ -2038,7 +2544,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     );
   }
 
-  void _showEmojiPickerSheet(int noteId, List<dynamic> currentReactions) {
+  void _showEmojiPickerSheet(int noteId, List<dynamic> currentReactions, bool isItineraryDetail) {
     // Full emoji list organized by categories
     const Map<String, List<String>> emojiCategories = {
       'Mặt cười & cảm xúc': [
@@ -2820,7 +3326,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                     ..add(emoji);
                                 }
                                 DatabaseService()
-                                    .updateSavedItemReactions(noteId, updated)
+                                    .updateNoteOrDetail(noteId, {'reactions': updated}, isItineraryDetail)
                                     .then((_) {
                                       _loadData(silent: true);
                                       Navigator.pop(ctx);
@@ -2889,21 +3395,48 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppTheme.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(8),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+        child: Slidable(
+          key: ValueKey('saved_place_${detail['id']}'),
+          endActionPane: ActionPane(
+            motion: const ScrollMotion(),
+            extentRatio: 0.25,
+            children: [
+              CustomSlidableAction(
+                onPressed: (context) => _removePlaceDetail(
+                  detail['id'],
+                  name,
+                  isSavedPlace: true,
+                ),
+                backgroundColor: const Color(0xFFE53935),
+                foregroundColor: Colors.white,
+                borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.delete_outline, color: Colors.white, size: 24),
+                    SizedBox(height: 4),
+                    Text('Xóa', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppTheme.border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(8),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Row(
-          children: [
+            child: Row(
+              children: [
             Expanded(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -3034,35 +3567,15 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                           ),
                         ),
                       )
-                    : GestureDetector(
-                        onTap: () => _removePlaceDetail(
-                          detail['id'],
-                          name,
-                          isSavedPlace: true,
-                        ),
-                        child: Container(
-                          margin: const EdgeInsets.all(4),
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(220),
-                            shape: BoxShape.circle,
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black12, blurRadius: 4),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.close_rounded,
-                            size: 12,
-                            color: Colors.redAccent,
-                          ),
-                        ),
-                      ),
+                    : const SizedBox.shrink(),
               ],
             ),
           ],
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   // ================= TAB 1: TỔNG QUAN =================
@@ -3766,18 +4279,12 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
   }
 
   // ================= TAB 2: HÀNH TRÌNH =================
-  Widget _buildAddPlaceToDayButton(String dayLabel) {
-    // Get all places added in the Overview sections (not days)
+  Widget _buildPopupMenuAddPlaceButton(String dayLabel, Color customColor) {
     final overviewDetails = _savedPlaces;
 
     if (overviewDetails.isEmpty) {
-      return TextButton.icon(
-        icon: const Icon(Icons.add, size: 16, color: AppTheme.subtitleText),
-        label: const Text(
-          'Chưa có địa điểm đã lưu',
-          style: TextStyle(color: AppTheme.subtitleText, fontSize: 12),
-        ),
-        onPressed: () {
+      return GestureDetector(
+        onTap: () {
           _showPremiumNotification(
             title: 'Lưu ý',
             message: 'Vui lòng thêm địa điểm ở Tab Tổng quan trước!',
@@ -3785,251 +4292,455 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
             color: AppTheme.primary,
           );
         },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.location_on_rounded, color: Colors.grey, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Thêm địa điểm',
+                style: TextStyle(color: Colors.grey, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
-    // Map details to unique places
+    final existingPlaceIds = <int>{};
+    for (var d in _details) {
+      if (d['placeId'] != null) {
+        existingPlaceIds.add(d['placeId'] as int);
+      }
+    }
+
     final Map<int, Map<String, dynamic>> uniquePlacesMap = {};
     for (var d in overviewDetails) {
       final p = d['Place'];
       if (p != null && p['id'] != null) {
-        uniquePlacesMap[p['id'] as int] = Map<String, dynamic>.from(p);
+        final int placeId = p['id'] as int;
+        if (!existingPlaceIds.contains(placeId) && !uniquePlacesMap.containsKey(placeId)) {
+          final placeWithSection = Map<String, dynamic>.from(p);
+          placeWithSection['section_name'] = d['section'];
+          uniquePlacesMap[placeId] = placeWithSection;
+        }
       }
     }
-    final List<Map<String, dynamic>> savedPlaces = uniquePlacesMap.values
-        .toList();
+    final List<Map<String, dynamic>> savedPlaces = uniquePlacesMap.values.toList();
 
-    return PopupMenuButton<Map<String, dynamic>>(
+    return GestureDetector(
+      onTap: () {
+        _showAddPlaceBottomSheet(dayLabel, savedPlaces);
+      },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: AppTheme.primaryPeach,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppTheme.primary.withAlpha(50)),
+          color: Colors.grey[100],
+          borderRadius: BorderRadius.circular(14),
         ),
         child: const Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.add_circle_outline_rounded,
-              color: AppTheme.primary,
-              size: 16,
-            ),
-            SizedBox(width: 4),
+            Icon(Icons.location_on_rounded, color: Colors.grey, size: 20),
+            SizedBox(width: 8),
             Text(
-              'Thêm địa điểm đã lưu',
-              style: TextStyle(
-                color: AppTheme.primary,
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-              ),
+              'Thêm địa điểm',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
             ),
           ],
         ),
       ),
-      tooltip: 'Thêm địa điểm đã lưu từ Tổng quan',
-      onSelected: (place) {
-        _addPlace(place, dayLabel);
+    );
+  }
+
+  void _showAddPlaceBottomSheet(String dayLabel, List<Map<String, dynamic>> savedPlaces) {
+    String searchQuery = '';
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filteredPlaces = savedPlaces.where((p) {
+              final name = (p['name'] as String?)?.toLowerCase() ?? '';
+              final address = (p['address'] as String?)?.toLowerCase() ?? '';
+              final q = searchQuery.toLowerCase();
+              return name.contains(q) || address.contains(q);
+            }).toList();
+
+            return SafeArea(
+              child: Container(
+                padding: const EdgeInsets.only(top: 12),
+                height: MediaQuery.of(context).size.height * 0.85,
+                child: Column(
+                  children: [
+                    // Handle
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Title
+                    const Text(
+                      'Thêm địa điểm',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.darkText,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Search bar
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: TextField(
+                          onChanged: (val) {
+                            setModalState(() {
+                              searchQuery = val;
+                            });
+                          },
+                          decoration: const InputDecoration(
+                            hintText: 'Tìm kiếm theo tên hoặc địa chỉ',
+                            hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Subtitle
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Chọn nhanh từ các danh sách của bạn',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.darkText,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // List
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: filteredPlaces.length,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        itemBuilder: (context, index) {
+                          final place = filteredPlaces[index];
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.location_on, color: AppTheme.darkText),
+                            title: Text(
+                              place['name'] ?? '',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                color: AppTheme.darkText,
+                              ),
+                            ),
+                            subtitle: Text(
+                              place['section_name'] ?? '',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _addPlace(place, dayLabel);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
       },
-      itemBuilder: (context) {
-        return savedPlaces.map((place) {
-          return PopupMenuItem<Map<String, dynamic>>(
-            value: place,
-            child: Row(
+    );
+  }
+
+  Widget _buildDayIconButton({required IconData icon, required VoidCallback onPressed}) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        height: 48,
+        width: 48,
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceVariant,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          icon,
+          color: AppTheme.darkText,
+          size: 20,
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _getMockTravelInfo(Map<String, dynamic> p1, Map<String, dynamic> p2) {
+    final double? lat1 = (p1['latitude'] as num?)?.toDouble();
+    final double? lon1 = (p1['longitude'] as num?)?.toDouble();
+    final double? lat2 = (p2['latitude'] as num?)?.toDouble();
+    final double? lon2 = (p2['longitude'] as num?)?.toDouble();
+
+    if (lat1 != null && lon1 != null && lat2 != null && lon2 != null) {
+      final dx = (lon1 - lon2) * 111.0 * math.cos(lat1 * math.pi / 180.0);
+      final dy = (lat1 - lat2) * 111.0;
+      final dist = math.sqrt(dx * dx + dy * dy);
+      final durationMinutes = (dist * 2.0).round();
+      final distStr = dist.toStringAsFixed(1).replaceAll('.', ',');
+      return {
+        'duration': durationMinutes > 0 ? durationMinutes : 5,
+        'distance': distStr,
+      };
+    }
+    return {
+      'duration': 8,
+      'distance': '3,5',
+    };
+  }
+
+  Widget _buildTravelSeparator(Map<String, dynamic> p1, Map<String, dynamic> p2) {
+    final travelInfo = _getMockTravelInfo(p1, p2);
+    final duration = travelInfo['duration'];
+    final distance = travelInfo['distance'];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.directions_car_filled_rounded,
+            color: Colors.grey,
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$duration phút từ ${p1['name'] ?? ''} · $distance km',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 12,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          GestureDetector(
+            onTap: () {
+              _showPremiumNotification(
+                title: 'Chỉ đường',
+                message: 'Đang mở Bản đồ chỉ đường từ ${p1['name'] ?? ''}...',
+                icon: Icons.navigation_rounded,
+                color: AppTheme.primary,
+              );
+            },
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.network(
-                    place['image'] ?? '',
-                    width: 32,
-                    height: 32,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        const Icon(Icons.image, size: 32),
+                Text(
+                  'Chỉ đường',
+                  style: TextStyle(
+                    color: Color(0xFF0284C7),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                Icon(
+                  Icons.arrow_drop_down_rounded,
+                  color: Color(0xFF0284C7),
+                  size: 16,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDayDetailsColumn(List<Map<String, dynamic>> dayDetails, Color customColor) {
+    return ReorderableListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      onReorder: (oldIndex, newIndex) {
+        if (oldIndex < newIndex) newIndex -= 1;
+        final updated = List.from(dayDetails);
+        final item = updated.removeAt(oldIndex);
+        updated.insert(newIndex, item);
+        
+        for (int i = 0; i < updated.length; i++) {
+          DatabaseService().updateNoteOrDetail(
+            updated[i]['id'],
+            {'sortOrder': i},
+            true,
+          );
+        }
+        Future.delayed(const Duration(milliseconds: 100), () => _loadData(silent: true));
+      },
+      children: List.generate(dayDetails.length, (idx) {
+        final detail = dayDetails[idx];
+        final id = detail['id'];
+
+        if (detail['placeId'] == null && detail['noteText'] != null) {
+          return Container(
+            key: ValueKey('note_$id'),
+            child: _buildSavedNoteCard(detail, idx + 1, idx, dayDetails),
+          );
+        }
+        
+        final place = detail['Place'] ?? {};
+        final name = place['name'] ?? '';
+        
+        String? extraInfo;
+        if (name.toLowerCase().contains('ueno') ||
+            name.toLowerCase().contains('sở thú ueno')) {
+          extraInfo = 'Đóng cửa T2';
+        } else if (place['openTime'] != null && place['closeTime'] != null) {
+          final open = (place['openTime'] as String).substring(0, 5);
+          final close = (place['closeTime'] as String).substring(0, 5);
+          extraInfo = 'Mở cửa: $open - $close';
+        }
+
+        final card = Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Slidable(
+            key: ValueKey('itinerary_place_${detail['id']}'),
+            endActionPane: ActionPane(
+              motion: const ScrollMotion(),
+              extentRatio: 0.25,
+              children: [
+                CustomSlidableAction(
+                  onPressed: (context) => _removePlaceDetail(detail['id'], place['name'] ?? ''),
+                  backgroundColor: const Color(0xFFE53935),
+                  foregroundColor: Colors.white,
+                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        place['name'] ?? '',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: AppTheme.darkText,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        place['address'] ?? '',
-                        style: const TextStyle(
-                          color: AppTheme.subtitleText,
-                          fontSize: 10,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      Icon(Icons.delete_outline, color: Colors.white, size: 24),
+                      SizedBox(height: 4),
+                      Text('Xóa', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
               ],
             ),
-          );
-        }).toList();
-      },
-    );
-  }
-
-  Widget _buildEmptyDayView(String dayLabel) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.calendar_today_rounded,
-              size: 48,
-              color: Colors.grey[300],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Chưa có hoạt động nào trong $dayLabel',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppTheme.darkText,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Hãy chọn "+ Thêm địa điểm đã lưu" ở trên hoặc sang Tab "Tổng quan" để lưu địa điểm bạn thích.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: AppTheme.subtitleText),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryPeach,
-                foregroundColor: AppTheme.primary,
-                elevation: 0,
-              ),
-              icon: const Icon(Icons.explore_outlined, size: 18),
-              label: const Text(
-                'Đi khám phá địa điểm mới',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              onPressed: () => _tabController.animateTo(2),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDayListView(List<Map<String, dynamic>> dayDetails) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: dayDetails.length,
-      itemBuilder: (context, idx) {
-        final detail = dayDetails[idx];
-        final place = detail['Place'] ?? {};
-        final arrival =
-            (detail['arrivalTime'] as String?)?.substring(0, 5) ?? '09:00';
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Timeline side line indicator
-            Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppTheme.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(8),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    arrival,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-                Container(
-                  width: 2,
-                  height: 90,
-                  color: idx == dayDetails.length - 1
-                      ? Colors.transparent
-                      : AppTheme.border,
-                ),
-              ],
-            ),
-            const SizedBox(width: 16),
-            // Place card
-            Expanded(
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(12),
-                decoration: AppTheme.premiumCardDecoration(radius: 16),
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        place['image'] ?? '',
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(Icons.image),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: customColor,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${idx + 1}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            place['name'] ?? '',
+                            name,
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                              fontSize: 15,
+                              color: AppTheme.darkText,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            place['address'] ?? '',
-                            style: const TextStyle(
-                              color: AppTheme.subtitleText,
-                              fontSize: 11,
+                          if (extraInfo != null) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.access_time_rounded,
+                                  color: AppTheme.subtitleText,
+                                  size: 12,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  extraInfo,
+                                  style: const TextStyle(
+                                    color: AppTheme.subtitleText,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
+                          ],
+                          const SizedBox(height: 8),
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Icon(
-                                Icons.star_rounded,
-                                color: AppTheme.amber,
-                                size: 14,
-                              ),
-                              const SizedBox(width: 2),
-                              Text(
-                                '${place['rating'] ?? 0.0}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11,
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  place['Category']?['name'] ?? 'Điểm tham quan',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Color(0xFF475569),
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             ],
@@ -4037,97 +4748,378 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                         ],
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.remove_circle_outline,
-                        color: Colors.redAccent,
-                      ),
-                      onPressed: () =>
-                          _removePlaceDetail(detail['id'], place['name'] ?? ''),
-                    ),
                   ],
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Stack(
+                alignment: Alignment.topRight,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      place['image'] ?? '',
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.image, size: 80),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+        Widget? travelSeparator;
+        if (detail['placeId'] != null && place.isNotEmpty) {
+          Map<String, dynamic>? nextPlaceRaw;
+          for (int j = idx + 1; j < dayDetails.length; j++) {
+            if (dayDetails[j]['placeId'] != null && dayDetails[j]['Place'] != null) {
+              nextPlaceRaw = dayDetails[j]['Place'] as Map<String, dynamic>?;
+              break;
+            }
+          }
+          if (nextPlaceRaw != null) {
+            travelSeparator = _buildTravelSeparator(
+              Map<String, dynamic>.from(place),
+              Map<String, dynamic>.from(nextPlaceRaw)
+            );
+          }
+        }
+
+        return Container(
+          key: ValueKey('place_$id'),
+          child: Column(
+            children: [
+              card,
+              if (travelSeparator != null) travelSeparator,
+              if (travelSeparator != null) const SizedBox(height: 8),
+            ],
+          ),
         );
-      },
+      }),
     );
   }
 
   Widget _buildItineraryTab() {
     final int totalDays = (_itineraryData['days'] as num?)?.toInt() ?? 1;
 
-    return DefaultTabController(
-      length: totalDays,
-      child: Column(
+    // Build the horizontal chips bar
+    final Widget horizontalBar = Container(
+      height: 60,
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
         children: [
-          Container(
-            color: Colors.white,
-            alignment: Alignment.centerLeft,
-            child: TabBar(
-              isScrollable: true,
-              labelColor: AppTheme.primary,
-              unselectedLabelColor: AppTheme.subtitleText,
-              indicatorColor: AppTheme.primary,
-              indicatorSize: TabBarIndicatorSize.label,
-              tabs: List.generate(
-                totalDays,
-                (index) => Tab(text: 'Ngày ${index + 1}'),
+          // Edit Calendar Button
+          GestureDetector(
+            onTap: _changeTripStartDate,
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: const BoxDecoration(
+                color: AppTheme.darkText,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.calendar_today_rounded,
+                color: Colors.white,
+                size: 18,
               ),
             ),
           ),
-          Expanded(
-            child: TabBarView(
-              children: List.generate(totalDays, (dayIndex) {
-                final dayLabel = 'Ngày ${dayIndex + 1}';
-                final dayDetails = _details
-                    .where((d) => d['day'] == (dayIndex + 1))
-                    .toList();
+          const SizedBox(width: 12),
+          // Day Chips
+          ...List.generate(totalDays, (index) {
+            final isSelected = _activeDayIndex == index;
+            final label = _getDayLabel(index);
+            return Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _activeDayIndex = index;
+                  });
+                  final key = _dayKeys[index];
+                  if (key != null && key.currentContext != null) {
+                    Scrollable.ensureVisible(
+                      key.currentContext!,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected ? AppTheme.darkText : Colors.grey[100],
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : AppTheme.darkText,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
 
-                return Column(
+    // Build the vertical days list
+    return Column(
+      children: [
+        horizontalBar,
+        Expanded(
+          child: ListView.builder(
+            controller: _itineraryScrollController,
+            padding: const EdgeInsets.only(bottom: 80),
+            itemCount: totalDays,
+            itemBuilder: (context, index) {
+              final dayLabel = 'Ngày ${index + 1}';
+              final dayDetails = _details
+                  .where((d) => d['day'] == (index + 1))
+                  .toList();
+              final daySavedItems = _savedPlaces
+                  .where((d) => d['section'] == dayLabel && d['noteText'] != null)
+                  .toList();
+              final dayKey = _dayKeys.putIfAbsent(index, () => GlobalKey());
+              final customColor = _dayColors[index] ?? AppTheme.primary;
+              final subtitle = _daySubtitles[index] ?? '';
+              final isCollapsed = _dayCollapsed[index] == true;
+
+              return Container(
+                key: dayKey,
+                margin: const EdgeInsets.only(bottom: 12),
+                color: Colors.white,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
+                    // Gray separator before this day card (except first)
+                    if (index > 0)
+                      Container(
+                        height: 10,
+                        color: Colors.grey[100],
                       ),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        border: Border(
-                          bottom: BorderSide(
-                            color: AppTheme.border,
-                            width: 0.5,
-                          ),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Hoạt động ($dayLabel)',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: AppTheme.darkText,
-                            ),
+                          // Day Header Row
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                _getDayLabel(index),
+                                style: const TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.darkText,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => _editDaySubtitle(index),
+                                  child: Text(
+                                    subtitle.isNotEmpty ? subtitle : 'Thêm tiêu đề phụ',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: subtitle.isNotEmpty ? AppTheme.darkText : Colors.grey[400],
+                                      fontWeight: subtitle.isNotEmpty ? FontWeight.w500 : FontWeight.normal,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.more_horiz_rounded,
+                                  color: AppTheme.subtitleText,
+                                ),
+                                onPressed: () => _showDayOptionsSheet(index),
+                              ),
+                            ],
                           ),
-                          _buildAddPlaceToDayButton(dayLabel),
+                          const SizedBox(height: 8),
+
+                          if (!isCollapsed) ...[
+                            Builder(
+                              builder: (context) {
+                                final placesOnly = dayDetails.where((d) => d['placeId'] != null && d['Place'] != null).toList();
+                                final placesCount = placesOnly.length;
+                                
+                                if (placesCount == 0) {
+                                  return Row(
+                                    children: [
+                                      GestureDetector(
+                                        onTap: () {
+                                          _showPremiumNotification(
+                                            title: 'Tự động điền',
+                                            message: 'Đang tạo lịch trình tự động từ AI...',
+                                            icon: Icons.bolt_rounded,
+                                            color: AppTheme.primary,
+                                          );
+                                        },
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.bolt_rounded, size: 16, color: customColor),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Tự động điền',
+                                              style: TextStyle(
+                                                color: customColor,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Text('·', style: TextStyle(color: Colors.grey)),
+                                      const SizedBox(width: 8),
+                                      GestureDetector(
+                                        onTap: () {
+                                          _showPremiumNotification(
+                                            title: 'Tối ưu lộ trình',
+                                            message: 'Tính năng tối ưu lộ trình thông minh!',
+                                            icon: Icons.alt_route_rounded,
+                                            color: customColor,
+                                          );
+                                        },
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.alt_route_rounded, size: 16, color: customColor),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Tối ưu lộ trình',
+                                              style: TextStyle(
+                                                color: customColor,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                } else {
+                                  String optimizeText = 'Tối ưu lộ trình';
+                                  if (placesCount >= 2) {
+                                    int totalDuration = 0;
+                                    double totalDistance = 0;
+                                    for (int i = 0; i < placesOnly.length - 1; i++) {
+                                      final p1 = Map<String, dynamic>.from(placesOnly[i]['Place'] as Map);
+                                      final p2 = Map<String, dynamic>.from(placesOnly[i + 1]['Place'] as Map);
+                                      final info = _getMockTravelInfo(p1, p2);
+                                      totalDuration += info['duration'] as int;
+                                      final dist = double.tryParse((info['distance'] as String).replaceAll(',', '.')) ?? 0.0;
+                                      totalDistance += dist;
+                                    }
+                                    optimizeText = 'Tối ưu lộ trình · $totalDuration phút, ${totalDistance.toStringAsFixed(1).replaceAll('.', ',')} km';
+                                  }
+
+                                  return GestureDetector(
+                                    onTap: () {
+                                      _showPremiumNotification(
+                                        title: 'Tối ưu lộ trình',
+                                        message: 'Tính năng tối ưu lộ trình thông minh!',
+                                        icon: Icons.route_outlined,
+                                        color: const Color(0xFF0284C7),
+                                      );
+                                    },
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.route_outlined,
+                                          color: Color(0xFF0284C7),
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          optimizeText,
+                                          style: const TextStyle(
+                                            color: Color(0xFF0284C7),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Day details Column (replaces _buildDayListView)
+                            if (dayDetails.isNotEmpty) ...[
+                              _buildDayDetailsColumn(dayDetails, customColor),
+                              const SizedBox(height: 16),
+                            ],
+
+                            // Day notes and checklists
+                            if (daySavedItems.isNotEmpty) ...[
+                              ...List.generate(daySavedItems.length, (sIdx) {
+                                final detail = daySavedItems[sIdx];
+                                return _buildSavedNoteCard(
+                                  detail,
+                                  sIdx + 1,
+                                  sIdx,
+                                  daySavedItems,
+                                );
+                              }),
+                              const SizedBox(height: 16),
+                            ],
+
+                            // Search & Options Input Row (Moved to bottom)
+                            Row(
+                              children: [
+                                // Input Box (Add Location button)
+                                Expanded(
+                                  child: _buildPopupMenuAddPlaceButton(dayLabel, customColor),
+                                ),
+                                const SizedBox(width: 12),
+                                // Notes button
+                                _buildDayIconButton(
+                                  icon: Icons.description_outlined,
+                                  onPressed: () => _addNoteInline(dayLabel),
+                                ),
+                                const SizedBox(width: 8),
+                                // List View button
+                                _buildDayIconButton(
+                                  icon: Icons.checklist_rounded,
+                                  onPressed: () => _addChecklistInline(dayLabel),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
-                    Expanded(
-                      child: dayDetails.isEmpty
-                          ? _buildEmptyDayView(dayLabel)
-                          : _buildDayListView(dayDetails),
-                    ),
                   ],
-                );
-              }),
-            ),
+                ),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

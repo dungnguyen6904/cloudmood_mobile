@@ -311,6 +311,70 @@ class DatabaseService {
     }
   }
 
+  /// Updates an itinerary with given data
+  Future<bool> updateItinerary(int id, Map<String, dynamic> data) async {
+    try {
+      await _adminClient
+          .from('Itinerary')
+          .update(data)
+          .eq('id', id);
+      refreshTrigger.value++; // Trigger reactive update
+      return true;
+    } catch (e) {
+      debugPrint('Error updating itinerary: $e');
+      return false;
+    }
+  }
+
+
+  /// Shifts day numbers for itinerary details greater than targetDay by offset
+  Future<bool> shiftItineraryDetailsDays({
+    required int itineraryId,
+    required int targetDay,
+    required int offset,
+  }) async {
+    try {
+      final details = await _adminClient
+          .from('ItineraryDetail')
+          .select('id, day')
+          .eq('itineraryId', itineraryId);
+      
+      for (var d in details) {
+        final int currentDay = d['day'] as int;
+        if (currentDay > targetDay) {
+          await _adminClient
+              .from('ItineraryDetail')
+              .update({'day': currentDay + offset})
+              .eq('id', d['id']);
+        }
+      }
+      refreshTrigger.value++;
+      return true;
+    } catch (e) {
+      debugPrint('Error shifting itinerary details days: $e');
+      return false;
+    }
+  }
+
+  /// Deletes all itinerary details for a specific day
+  Future<bool> deleteItineraryDetailsForDay({
+    required int itineraryId,
+    required int day,
+  }) async {
+    try {
+      await _adminClient
+          .from('ItineraryDetail')
+          .delete()
+          .eq('itineraryId', itineraryId)
+          .eq('day', day);
+      refreshTrigger.value++;
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting itinerary details for day: $e');
+      return false;
+    }
+  }
+
   /// Fetches reviews submitted by the user
   Future<List<Map<String, dynamic>>> fetchUserReviews(int userId) async {
     try {
@@ -404,23 +468,40 @@ class DatabaseService {
     }
   }
 
-  /// Adds a place to an itinerary's day details
+  /// Updates day configs for an itinerary
+  Future<bool> updateItineraryDayConfigs(int itineraryId, Map<String, dynamic> dayConfigs) async {
+    try {
+      await _adminClient
+          .from('Itinerary')
+          .update({'dayConfigs': dayConfigs})
+          .eq('id', itineraryId);
+      refreshTrigger.value++;
+      return true;
+    } catch (e) {
+      debugPrint('Error updating day configs: $e');
+      return false;
+    }
+  }
+
+  /// Adds a place or note to an itinerary's day details
   Future<Map<String, dynamic>?> addPlaceToItinerary({
     required int itineraryId,
-    required int placeId,
+    int? placeId,
     required int day,
     String arrivalTime = '09:00:00+07',
     String leaveTime = '11:00:00+07',
     int sortOrder = 0,
+    String? noteText,
   }) async {
     try {
       final data = {
         'itineraryId': itineraryId,
-        'placeId': placeId,
+        if (placeId != null) 'placeId': placeId,
         'day': day,
         'arrivalTime': arrivalTime,
         'leaveTime': leaveTime,
         'sortOrder': sortOrder,
+        if (noteText != null) 'noteText': noteText,
       };
       final response = await _adminClient
           .from('ItineraryDetail')
@@ -447,6 +528,45 @@ class DatabaseService {
     } catch (e) {
       debugPrint('Error deleting place from itinerary: $e');
       return false;
+    }
+  }
+
+  /// Updates an itinerary detail (e.g. day or sortOrder)
+  Future<bool> updateItineraryDetail(int id, Map<String, dynamic> data) async {
+    try {
+      await _adminClient
+          .from('ItineraryDetail')
+          .update(data)
+          .eq('id', id);
+      refreshTrigger.value++;
+      return true;
+    } catch (e) {
+      debugPrint('Error updating itinerary detail: $e');
+      return false;
+    }
+  }
+
+  /// Updates a saved place item (e.g. section or sortOrder)
+  Future<bool> updateSavedPlace(int id, Map<String, dynamic> data) async {
+    try {
+      await _adminClient
+          .from('ItinerarySavedPlace')
+          .update(data)
+          .eq('id', id);
+      refreshTrigger.value++;
+      return true;
+    } catch (e) {
+      debugPrint('Error updating saved place: $e');
+      return false;
+    }
+  }
+
+  /// Helper to update either ItineraryDetail or ItinerarySavedPlace
+  Future<bool> updateNoteOrDetail(int id, Map<String, dynamic> data, bool isItineraryDetail) async {
+    if (isItineraryDetail) {
+      return updateItineraryDetail(id, data);
+    } else {
+      return updateSavedPlace(id, data);
     }
   }
 

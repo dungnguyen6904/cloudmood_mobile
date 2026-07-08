@@ -453,22 +453,14 @@ class _CreateItineraryWizardSheetState
                   ),
                   const SizedBox(height: 8),
                   // Progress Indicator
-                  Row(
-                    children: List.generate(4, (index) {
-                      final isActive = index <= _currentStep;
-                      return Expanded(
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          height: 5,
-                          decoration: BoxDecoration(
-                            color: isActive
-                                ? AppTheme.primary
-                                : AppTheme.border,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      );
-                    }),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: (_currentStep + 1) / 4,
+                      minHeight: 6,
+                      backgroundColor: AppTheme.border,
+                      valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primary),
+                    ),
                   ),
                 ],
               ),
@@ -507,10 +499,9 @@ class _CreateItineraryWizardSheetState
                 children: [
                   // Back Button
                   if (_currentStep > 0)
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
+                    TextButton(
+                      style: TextButton.styleFrom(
                         minimumSize: const Size(100, 52),
-                        side: const BorderSide(color: AppTheme.border),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
@@ -537,15 +528,14 @@ class _CreateItineraryWizardSheetState
                       padding: EdgeInsets.only(
                         left: _currentStep > 0 ? 12.0 : 0.0,
                       ),
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
                           backgroundColor: AppTheme.primary,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          elevation: 0,
                         ),
                         onPressed: _isSaving ? null : _nextStep,
                         child: _isSaving
