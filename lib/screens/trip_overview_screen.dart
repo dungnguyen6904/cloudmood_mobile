@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../services/database_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/section_style_sheet.dart';
+import 'trip_ai_chat_screen.dart';
 
 class TripOverviewScreen extends StatefulWidget {
   final Map<String, dynamic> itinerary;
@@ -23,12 +29,49 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
   List<Map<String, dynamic>> _savedPlaces = [];
 
   // Overview Tab section names
-  final List<String> _sectionNames = ['Địa điểm tham quan'];
+  final List<String> _sectionNames = [];
   final Map<String, TextEditingController> _searchControllers = {};
   final Map<String, List<Map<String, dynamic>>> _searchResults = {};
 
+  // For inline section title editing
+  String? _editingSection;
+  final TextEditingController _sectionTitleController = TextEditingController();
+  final FocusNode _sectionTitleFocusNode = FocusNode();
+
+  final Map<String, Color> _sectionColors = {};
+  final Map<String, IconData> _sectionIcons = {};
+  final Map<String, ExpansionTileController> _expansionControllers = {};
+
+  bool _isSelectionMode = false;
+  Set<int> _selectedItemIds = {};
+  Set<String> _selectedSections = {};
+  final List<Color> _availableColors = [
+    Colors.green,
+    Colors.tealAccent,
+    Colors.lightBlue,
+    Colors.blue,
+    Colors.deepPurple,
+    Colors.pinkAccent,
+    Colors.orange,
+    Colors.orangeAccent,
+    const Color(0xFF2E7D32),
+    const Color(0xFF00695C),
+    const Color(0xFF1565C0),
+    const Color(0xFF283593),
+    const Color(0xFF6A1B9A),
+    const Color(0xFFAD1457),
+    Colors.brown,
+    const Color(0xFF5D4037),
+  ];
+
   // Expense Tab custom items
   List<Map<String, dynamic>> _customExpenses = [];
+
+  // Map state
+  bool _isMapExpanded = false;
+  LatLng? _mapCenter;
+  bool _isDragging = false;
+  double? _dragHeight;
 
   // AI Dialog state
   bool _isGeneratingAI = false;
@@ -40,8 +83,6 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     super.initState();
     _itineraryData = widget.itinerary;
     _tabController = TabController(length: 4, vsync: this);
-    _searchControllers['Địa điểm tham quan'] = TextEditingController();
-    _searchResults['Địa điểm tham quan'] = [];
     _loadData();
   }
 
@@ -53,7 +94,81 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     for (var controller in _searchControllers.values) {
       controller.dispose();
     }
+    _sectionTitleController.dispose();
+    _sectionTitleFocusNode.dispose();
     super.dispose();
+  }
+
+  void _saveSectionTitle(String oldTitle, String newTitle) {
+    if (newTitle.trim().isEmpty || newTitle == oldTitle) {
+      setState(() {
+        _editingSection = null;
+      });
+      return;
+    }
+    setState(() {
+      final index = _sectionNames.indexOf(oldTitle);
+      if (index != -1) {
+        _sectionNames[index] = newTitle;
+        if (_searchControllers.containsKey(oldTitle)) {
+          _searchControllers[newTitle] = _searchControllers.remove(oldTitle)!;
+        }
+        if (_searchResults.containsKey(oldTitle)) {
+          _searchResults[newTitle] = _searchResults.remove(oldTitle)!;
+        }
+        for (var d in _savedPlaces) {
+          if (d['section'] == oldTitle) {
+            d['section'] = newTitle;
+          }
+        }
+        if (_sectionColors.containsKey(oldTitle)) {
+          _sectionColors[newTitle] = _sectionColors.remove(oldTitle)!;
+        }
+        if (_sectionIcons.containsKey(oldTitle)) {
+          _sectionIcons[newTitle] = _sectionIcons.remove(oldTitle)!;
+        }
+      }
+      _editingSection = null;
+    });
+
+    // Sync the rename to database (delete old, insert new)
+    DatabaseService().deleteItinerarySection(
+      _itineraryData['id'] as int,
+      oldTitle,
+    );
+    _syncSectionsToDatabase();
+  }
+
+  void _showSectionStyleSheet(
+    BuildContext context,
+    String sectionName, {
+    int initialTabIndex = 0,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => SectionStyleSheet(
+        initialSection: sectionName,
+        sections: _sectionNames,
+        savedPlaces: _savedPlaces,
+        sectionColors: _sectionColors,
+        sectionIcons: _sectionIcons,
+        initialTabIndex: initialTabIndex,
+        onSaved: (newSections, newPlaces, newColors, newIcons) {
+          setState(() {
+            _sectionNames.clear();
+            _sectionNames.addAll(newSections);
+            _savedPlaces = newPlaces;
+            _sectionColors.clear();
+            _sectionColors.addAll(newColors);
+            _sectionIcons.clear();
+            _sectionIcons.addAll(newIcons);
+          });
+          _syncSectionsToDatabase();
+        },
+      ),
+    );
   }
 
   void _showPremiumNotification({
@@ -181,9 +296,41 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     });
   }
 
+  Future<void> _fetchMapData() async {
+    final apiKey = dotenv.env['GEOAPIFY_API_KEY'];
+    if (apiKey == null) return;
+    final String dest = _itineraryData['destination'] ?? '';
+    final url = Uri.parse(
+      'https://api.geoapify.com/v1/geocode/search?text=${Uri.encodeComponent(dest)}&limit=1&apiKey=$apiKey',
+    );
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['features'] != null && data['features'].isNotEmpty) {
+          final props = data['features'][0]['properties'];
+          final double lat = (props['lat'] as num).toDouble();
+          final double lon = (props['lon'] as num).toDouble();
+          if (mounted) {
+            setState(() {
+              _mapCenter = LatLng(lat, lon);
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching map: $e');
+    }
+  }
+
   Future<void> _loadData({bool silent = false}) async {
     if (!silent) {
       setState(() => _isLoading = true);
+    }
+
+    // Fetch map data in background
+    if (_mapCenter == null) {
+      _fetchMapData();
     }
     final itineraryId = _itineraryData['id'] as int;
 
@@ -217,20 +364,49 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
       _allPlaces = places;
     }
 
-    // Restore custom section names
-    final prefs = await SharedPreferences.getInstance();
-    final savedSections = prefs.getStringList('sections_${itineraryId}');
+    // Restore custom section names, colors, and icons from Database
+    final savedSections = _itineraryData['ItinerarySection'] as List<dynamic>?;
+    _sectionNames.clear();
     if (savedSections != null && savedSections.isNotEmpty) {
+      // Sort by sortOrder
+      savedSections.sort(
+        (a, b) => (a['sortOrder'] as int? ?? 0).compareTo(
+          b['sortOrder'] as int? ?? 0,
+        ),
+      );
       for (var sec in savedSections) {
-        if (!_sectionNames.contains(sec)) {
-          _sectionNames.add(sec);
-          _searchControllers[sec] = TextEditingController();
-          _searchResults[sec] = [];
+        final name = sec['name'] as String;
+        if (!_sectionNames.contains(name)) {
+          _sectionNames.add(name);
+          _searchControllers.putIfAbsent(name, () => TextEditingController());
+          _searchResults.putIfAbsent(name, () => []);
         }
+        _sectionColors[name] = Color(int.parse(sec['colorCode'] as String));
+        _sectionIcons[name] = IconData(
+          sec['iconCode'] as int,
+          fontFamily: 'MaterialIcons',
+        );
+      }
+    }
+
+    // Ensure any section that has saved places is in _sectionNames
+    for (var place in _savedPlaces) {
+      final section = place['section'] as String?;
+      if (section != null && !_sectionNames.contains(section)) {
+        _sectionNames.add(section);
+        _searchControllers.putIfAbsent(section, () => TextEditingController());
+        _searchResults.putIfAbsent(section, () => []);
+        _sectionColors.putIfAbsent(
+          section,
+          () =>
+              _availableColors[_sectionNames.length % _availableColors.length],
+        );
+        _sectionIcons.putIfAbsent(section, () => Icons.folder_rounded);
       }
     }
 
     // Restore custom expenses
+    final prefs = await SharedPreferences.getInstance();
     final savedExpenses = prefs.getString('expenses_${itineraryId}');
     if (savedExpenses != null) {
       try {
@@ -251,10 +427,21 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     }
   }
 
-  Future<void> _saveSectionsToPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
+  Future<void> _syncSectionsToDatabase() async {
     final itineraryId = _itineraryData['id'] as int;
-    await prefs.setStringList('sections_${itineraryId}', _sectionNames);
+    for (int i = 0; i < _sectionNames.length; i++) {
+      final name = _sectionNames[i];
+      final color = _sectionColors[name]?.value ?? AppTheme.primary.value;
+      final icon =
+          _sectionIcons[name]?.codePoint ?? Icons.looks_one_rounded.codePoint;
+      await DatabaseService().upsertItinerarySection(
+        itineraryId: itineraryId,
+        name: name,
+        colorCode: color.toString(),
+        iconCode: icon,
+        sortOrder: i,
+      );
+    }
   }
 
   Future<void> _saveExpensesToPrefs() async {
@@ -466,6 +653,101 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
   }
 
   // Create new section
+  void _deleteSelectedItems() async {
+    if (_selectedItemIds.isEmpty) return;
+
+    final idsToDelete = _selectedItemIds.toList();
+    final success = await DatabaseService().deleteMultipleSavedPlaces(
+      idsToDelete,
+    );
+    if (success) {
+      setState(() {
+        _isSelectionMode = false;
+        _selectedItemIds.clear();
+        _selectedSections.clear();
+      });
+      _loadData(silent: true);
+    }
+  }
+
+  void _showSelectSectionBottomSheet({required bool isCopy}) {
+    if (_selectedItemIds.isEmpty) return;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isCopy ? 'Sao chép đến...' : 'Di chuyển đến...',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.darkText,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(),
+              ..._sectionNames.map((section) {
+                return ListTile(
+                  leading: Icon(
+                    _sectionIcons[section] ?? Icons.looks_one_rounded,
+                    color: _sectionColors[section] ?? AppTheme.primary,
+                  ),
+                  title: Text(section),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final ids = _selectedItemIds.toList();
+                    bool success = false;
+                    if (isCopy) {
+                      success = await DatabaseService().copySavedPlaces(
+                        ids,
+                        section,
+                      );
+                    } else {
+                      success = await DatabaseService().moveSavedPlaces(
+                        ids,
+                        section,
+                      );
+                    }
+                    if (success) {
+                      setState(() {
+                        _isSelectionMode = false;
+                        _selectedItemIds.clear();
+                        _selectedSections.clear();
+                      });
+                      _loadData(silent: true);
+                    }
+                  },
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _createNewSection() {
     final controller = TextEditingController();
     showDialog(
@@ -522,8 +804,24 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                     _sectionNames.add(name);
                     _searchControllers[name] = TextEditingController();
                     _searchResults[name] = [];
+
+                    final usedColors = _sectionColors.values.toSet();
+                    Color? newColor;
+                    for (var c in _availableColors) {
+                      if (!usedColors.contains(c)) {
+                        newColor = c;
+                        break;
+                      }
+                    }
+                    if (newColor == null) {
+                      final idx =
+                          _sectionNames.length % _availableColors.length;
+                      newColor = _availableColors[idx];
+                    }
+                    _sectionColors[name] = newColor;
+                    _sectionIcons[name] = Icons.looks_one_rounded;
                   });
-                  _saveSectionsToPrefs();
+                  _syncSectionsToDatabase();
                   Navigator.pop(context);
                 }
               },
@@ -618,399 +916,537 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
 
   // AI Itinerary Planner Generator simulating API
   void _runAIPlanner() {
-    setState(() => _isGeneratingAI = true);
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            Future.delayed(const Duration(seconds: 2), () {
-              if (mounted && _isGeneratingAI) {
-                setDialogState(() {
-                  _isGeneratingAI = false;
-                });
-              }
-            });
-
-            if (_isGeneratingAI) {
-              return AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                content: const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(height: 20),
-                    CircularProgressIndicator(color: AppTheme.primary),
-                    SizedBox(height: 24),
-                    Text(
-                      'AI CloudMood đang tối ưu lịch trình của bạn...',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Tìm kiếm các địa điểm hàng đầu dựa trên sở thích...',
-                      style: TextStyle(
-                        color: AppTheme.subtitleText,
-                        fontSize: 12,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(height: 20),
-                  ],
-                ),
-              );
-            }
-
-            // AI suggested places based on destination
-            final List<Map<String, dynamic>> suggested = _allPlaces
-                .take(3)
-                .toList();
-
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              title: const Row(
-                children: [
-                  Icon(
-                    Icons.auto_awesome_rounded,
-                    color: Colors.purple,
-                    size: 24,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Lịch Trình AI Đề Xuất',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Dựa trên thông tin của bạn, AI khuyên bạn nên ghé thăm các địa điểm sau:',
-                    style: TextStyle(fontSize: 13, color: AppTheme.darkText),
-                  ),
-                  const SizedBox(height: 12),
-                  ...suggested.map((place) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              place['image'] ?? '',
-                              width: 50,
-                              height: 50,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  const Icon(Icons.image, size: 50),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  place['name'] ?? '',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(
-                                  place['address'] ?? '',
-                                  style: const TextStyle(
-                                    color: AppTheme.subtitleText,
-                                    fontSize: 11,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Bỏ qua',
-                    style: TextStyle(color: AppTheme.subtitleText),
-                  ),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    setState(() => _isLoading = true);
-                    for (var place in suggested) {
-                      await DatabaseService().addPlaceToSaved(
-                        itineraryId: _itineraryData['id'] as int,
-                        placeId: place['id'] as int,
-                        section: 'Địa điểm tham quan',
-                      );
-                    }
-                    await _loadData();
-                    if (mounted) {
-                      _showPremiumNotification(
-                        title: 'Đề xuất AI',
-                        message: 'Đã tự động thêm các địa điểm đề xuất bởi AI!',
-                        icon: Icons.auto_awesome_rounded,
-                        color: const Color(0xFF9C27B0),
-                      );
-                    }
-                  },
-                  child: const Text(
-                    'Thêm tất cả',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TripAIChatScreen(
+          destination: _itineraryData['destination'] ?? 'Điểm đến',
+        ),
+      ),
     );
   }
 
-  // Map Overview dialog mockup
   void _showMapOverview() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: const Text(
-            'Bản đồ chuyến đi',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.network(
-                  'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=400&auto=format&fit=crop&q=80',
-                  height: 250,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Lộ trình được định vị và tối ưu hóa trên bản đồ!',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Tổng cộng có ${_details.length} điểm dừng đã được đánh dấu.',
-                style: const TextStyle(
-                  color: AppTheme.subtitleText,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'Đóng',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        );
-      },
-    );
+    setState(() {
+      _isMapExpanded = true;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final destination = _itineraryData['destination'] ?? 'Điểm đến';
+    final PreferredSizeWidget appBarBottom = PreferredSize(
+      preferredSize: const Size.fromHeight(48),
+      child: Container(
+        color: Colors.white,
+        child: TabBar(
+          controller: _tabController,
+          labelColor: AppTheme.primary,
+          unselectedLabelColor: AppTheme.subtitleText,
+          indicatorColor: AppTheme.primary,
+          indicatorWeight: 3,
+          indicatorSize: TabBarIndicatorSize.tab,
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+          tabs: const [
+            Tab(text: 'Tổng quan'),
+            Tab(text: 'Hành trình'),
+            Tab(text: 'Khám phá'),
+            Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [Icon(Icons.attach_money_rounded, size: 16)],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final topPadding = MediaQuery.of(context).padding.top;
+    final headerHeight =
+        topPadding + 56.0 + 48.0; // 56 for AppBar + 48 for TabBar
+    final screenHeight = MediaQuery.of(context).size.height;
+    final double targetSheetHeight = !_isMapExpanded
+        ? (screenHeight - headerHeight)
+        : 75.0;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0.5,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: AppTheme.primary,
-            size: 20,
-          ),
-          onPressed: () {
-            // Pop back to the parent screen (Home or Profile)
-            Navigator.pop(context);
-          },
-        ),
-        title: Text(
-          'Chuyến đi đến $destination',
-          style: const TextStyle(
-            color: AppTheme.darkText,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share_rounded, color: AppTheme.subtitleText),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Đã sao chép liên kết chuyến đi!'),
-                  behavior: SnackBarBehavior.fixed,
-                ),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(
-              Icons.more_vert_rounded,
-              color: AppTheme.subtitleText,
-            ),
-            onPressed: () {},
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Container(
-            color: Colors.white,
-            child: TabBar(
-              controller: _tabController,
-              labelColor: AppTheme.primary,
-              unselectedLabelColor: AppTheme.subtitleText,
-              indicatorColor: AppTheme.primary,
-              indicatorWeight: 3,
-              indicatorSize: TabBarIndicatorSize.tab,
-              labelStyle: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
-              tabs: const [
-                Tab(text: 'Tổng quan'),
-                Tab(text: 'Hành trình'),
-                Tab(text: 'Khám phá'),
-                Tab(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+      body: Stack(
+        children: [
+          // 1. Background Map
+          Positioned.fill(
+            child: _mapCenter != null
+                ? FlutterMap(
+                    options: MapOptions(
+                      initialCenter: _mapCenter!,
+                      initialZoom: 13.0,
+                    ),
                     children: [
-                      Text(
-                        r'$',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                      TileLayer(
+                        urlTemplate: 'https://maps.geoapify.com/v1/tile/osm-bright-smooth/{z}/{x}/{y}.png?apiKey={api_key}',
+                        additionalOptions: {
+                          'api_key': dotenv.env['GEOAPIFY_API_KEY'] ?? '',
+                        },
+                      ),
+                      MarkerLayer(
+                        markers: _savedPlaces.map((savedPlace) {
+                          final p = savedPlace['Place'] as Map<String, dynamic>?;
+                          if (p == null || p['latitude'] == null || p['longitude'] == null) {
+                            return null;
+                          }
+                          final lat = (p['latitude'] as num).toDouble();
+                          final lon = (p['longitude'] as num).toDouble();
+                          final sectionName = savedPlace['section'] as String?;
+                          
+                          final color = _sectionColors[sectionName] ?? AppTheme.primary;
+                          final icon = _sectionIcons[sectionName] ?? Icons.location_on;
+                          
+                          return Marker(
+                            point: LatLng(lat, lon),
+                            width: 40,
+                            height: 40,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: color,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Icon(icon, color: Colors.white, size: 20),
+                            ),
+                          );
+                        }).whereType<Marker>().toList(),
                       ),
                     ],
+                  )
+                : const Center(
+                    child: CircularProgressIndicator(color: AppTheme.primary),
+                  ),
+          ),
+
+          // 2. Map Action Buttons (Hidden when full screen)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            top: topPadding + 80,
+            right: !_isMapExpanded ? -60 : 16,
+            child: Column(
+              children: [
+                CircleAvatar(
+                  backgroundColor: Colors.white,
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.share_rounded,
+                      color: AppTheme.darkText,
+                      size: 20,
+                    ),
+                    onPressed: () {},
+                  ),
+                ),
+                const SizedBox(height: 12),
+                CircleAvatar(
+                  backgroundColor: Colors.white,
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.more_horiz_rounded,
+                      color: AppTheme.darkText,
+                      size: 20,
+                    ),
+                    onPressed: () {},
+                  ),
+                ),
+                const SizedBox(height: 12),
+                CircleAvatar(
+                  backgroundColor: Colors.white,
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.search,
+                      color: AppTheme.darkText,
+                      size: 20,
+                    ),
+                    onPressed: () {},
+                  ),
+                ),
+                const SizedBox(height: 12),
+                CircleAvatar(
+                  backgroundColor: Colors.white,
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.layers_outlined,
+                      color: AppTheme.darkText,
+                      size: 20,
+                    ),
+                    onPressed: () {},
                   ),
                 ),
               ],
             ),
           ),
-        ),
-      ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppTheme.primary),
-            )
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildOverviewTab(),
-                _buildItineraryTab(),
-                _buildExploreTab(),
-                _buildExpensesTab(),
-              ],
-            ),
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          // AI Magic Wand button
-          Container(
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [AppTheme.primary, Color(0xFF7C3AED)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: FloatingActionButton(
-              heroTag: 'ai_btn',
-              onPressed: _runAIPlanner,
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              mini: true,
-              child: const Icon(
-                Icons.auto_awesome_rounded,
-                color: Colors.white,
-                size: 20,
+
+          // 3. Dynamic Custom Header
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            width: double.infinity,
+            color: !_isMapExpanded ? Colors.white : Colors.transparent,
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Top Bar
+                  SizedBox(
+                    height: 56,
+                    child: _isSelectionMode
+                        ? Row(
+                            children: [
+                              Container(
+                                margin: const EdgeInsets.only(left: 16),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF44336),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  '${_selectedItemIds.length}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: Colors.black87,
+                                ),
+                                onPressed: _deleteSelectedItems,
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.close_rounded,
+                                  color: Colors.black87,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _isSelectionMode = false;
+                                    _selectedItemIds.clear();
+                                    _selectedSections.clear();
+                                  });
+                                },
+                              ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOutCubic,
+                                margin: const EdgeInsets.only(left: 16),
+                                decoration: BoxDecoration(
+                                  color: !_isMapExpanded
+                                      ? Colors.transparent
+                                      : Colors.white,
+                                  shape: BoxShape.circle,
+                                  boxShadow: !_isMapExpanded
+                                      ? []
+                                      : [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(
+                                              0.05,
+                                            ),
+                                            blurRadius: 4,
+                                          ),
+                                        ],
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.arrow_back_ios_new_rounded,
+                                    color: AppTheme.darkText,
+                                  ),
+                                  onPressed: () {
+                                    if (_isMapExpanded) {
+                                      setState(() => _isMapExpanded = false);
+                                    } else {
+                                      Navigator.pop(context);
+                                    }
+                                  },
+                                ),
+                              ),
+                              const Spacer(),
+                              if (!_isMapExpanded)
+                                Text(
+                                  'Chuyến đi đến $destination',
+                                  style: const TextStyle(
+                                    color: AppTheme.darkText,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              const Spacer(),
+                              if (!_isMapExpanded) ...[
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.share_rounded,
+                                    color: AppTheme.subtitleText,
+                                  ),
+                                  onPressed: () {},
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.more_vert_rounded,
+                                    color: AppTheme.subtitleText,
+                                  ),
+                                  onPressed: () {},
+                                ),
+                              ] else
+                                const SizedBox(
+                                  width: 48,
+                                ), // Balance for back button when expanded
+                            ],
+                          ),
+                  ),
+
+                  // Tab Bar (Only visible when full screen)
+                  if (!_isMapExpanded) appBarBottom,
+                ],
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          // Map FAB
-          FloatingActionButton(
-            heroTag: 'map_btn',
-            onPressed: _showMapOverview,
-            backgroundColor: AppTheme.darkText,
-            mini: true,
-            child: const Icon(Icons.map_rounded, color: Colors.white, size: 20),
-          ),
-          const SizedBox(height: 8),
-          // Plus FAB
-          FloatingActionButton(
-            heroTag: 'add_btn',
-            onPressed: () {
-              if (_tabController.index == 3) {
-                _showAddExpenseDialog();
-              } else if (_tabController.index == 2) {
-                _showPremiumNotification(
-                  title: 'Hướng dẫn',
-                  message: 'Vui lòng chọn địa điểm bên dưới để thêm!',
-                  icon: Icons.info_outline_rounded,
-                  color: AppTheme.primary,
-                );
-              } else {
-                _createNewSection();
-              }
-            },
-            backgroundColor: AppTheme.primary,
-            child: const Icon(Icons.add, color: Colors.white),
+
+          // 4. Main Content Sheet
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: AnimatedContainer(
+              duration: _isDragging
+                  ? Duration.zero
+                  : const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              height: _dragHeight ?? targetSheetHeight,
+              decoration: BoxDecoration(
+                color: AppTheme.background,
+                borderRadius: !_isMapExpanded
+                    ? BorderRadius.zero
+                    : const BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: [
+                  if (_isMapExpanded || _isDragging)
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 15,
+                      offset: const Offset(0, -5),
+                    ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: !_isMapExpanded
+                    ? BorderRadius.zero
+                    : const BorderRadius.vertical(top: Radius.circular(24)),
+                child: Column(
+                  children: [
+                    // Drag handle
+                    GestureDetector(
+                      onVerticalDragStart: (details) {
+                        setState(() {
+                          _isDragging = true;
+                          _dragHeight = targetSheetHeight;
+                        });
+                      },
+                      onVerticalDragUpdate: (details) {
+                        setState(() {
+                          _dragHeight =
+                              (_dragHeight ?? targetSheetHeight) -
+                              details.primaryDelta!;
+                          // Clamp the height
+                          final max = screenHeight - headerHeight;
+                          final min = 75.0; // Allow dragging down to bottom
+                          if (_dragHeight! > max) _dragHeight = max;
+                          if (_dragHeight! < min) _dragHeight = min;
+                        });
+                      },
+                      onVerticalDragEnd: (details) {
+                        final max = screenHeight - headerHeight;
+                        final min = 75.0;
+                        final mid = (max + min) / 2;
+
+                        setState(() {
+                          _isDragging = false;
+                          if (details.primaryVelocity != null &&
+                              details.primaryVelocity!.abs() > 300) {
+                            _isMapExpanded = details.primaryVelocity! > 0;
+                          } else {
+                            _isMapExpanded =
+                                (_dragHeight ?? targetSheetHeight) < mid;
+                          }
+                          _dragHeight = null;
+                        });
+                      },
+                      child: Container(
+                        color: Colors.transparent,
+                        width: double.infinity,
+                        padding: EdgeInsets.only(
+                          top: 12,
+                          bottom: _isMapExpanded ? 4 : 0,
+                        ),
+                        child: Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[300],
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Show TabBar inside the sheet when expanded so we can still switch tabs
+                    if (_isMapExpanded)
+                      Container(
+                        color: Colors.white,
+                        child: TabBar(
+                          controller: _tabController,
+                          labelColor: AppTheme.primary,
+                          unselectedLabelColor: AppTheme.subtitleText,
+                          indicatorColor: AppTheme.primary,
+                          indicatorWeight: 3,
+                          indicatorSize: TabBarIndicatorSize.tab,
+                          labelStyle: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                          tabs: const [
+                            Tab(text: 'Tổng quan'),
+                            Tab(text: 'Hành trình'),
+                            Tab(text: 'Khám phá'),
+                            Tab(
+                              icon: Icon(Icons.attach_money_rounded, size: 16),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // The Tab Views
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          _isLoading
+                              ? const Center(
+                                  child: CircularProgressIndicator(
+                                    color: AppTheme.primary,
+                                  ),
+                                )
+                              : LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    if (constraints.maxHeight < 100) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    return TabBarView(
+                                      controller: _tabController,
+                                      children: [
+                                        _buildOverviewTab(),
+                                        _buildItineraryTab(),
+                                        _buildExploreTab(),
+                                        _buildExpensesTab(),
+                                      ],
+                                    );
+                                  },
+                                ),
+
+                          // FABs
+                          if (!_isMapExpanded)
+                            Positioned(
+                              right: 16,
+                              bottom: 16,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          AppTheme.primary,
+                                          Color(0xFF7C3AED),
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                    ),
+                                    child: FloatingActionButton(
+                                      heroTag: 'ai_btn',
+                                      onPressed: _runAIPlanner,
+                                      backgroundColor: Colors.transparent,
+                                      elevation: 0,
+                                      mini: true,
+                                      child: const Icon(
+                                        Icons.auto_awesome_rounded,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  FloatingActionButton(
+                                    heroTag: 'map_btn',
+                                    onPressed: _showMapOverview,
+                                    backgroundColor: AppTheme.darkText,
+                                    mini: true,
+                                    child: const Icon(
+                                      Icons.map_rounded,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  FloatingActionButton(
+                                    heroTag: 'add_btn',
+                                    onPressed: () {
+                                      if (_tabController.index == 3) {
+                                        _showAddExpenseDialog();
+                                      } else if (_tabController.index == 2) {
+                                        _showPremiumNotification(
+                                          title: 'Hướng dẫn',
+                                          message:
+                                              'Vui lòng chọn địa điểm bên dưới để thêm!',
+                                          icon: Icons.info_outline_rounded,
+                                          color: AppTheme.primary,
+                                        );
+                                      } else {
+                                        _createNewSection();
+                                      }
+                                    },
+                                    backgroundColor: AppTheme.primary,
+                                    child: const Icon(
+                                      Icons.add,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -1158,394 +1594,420 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     final bool allDone =
         todoList.isNotEmpty && todoList.every((item) => item['done'] == true);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.border, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header row: icon + title + collapse/check toggle
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFE2E8F0),
-                  shape: BoxShape.circle,
+    return GestureDetector(
+      onTap: () {
+        if (_isSelectionMode) {
+          setState(() {
+            if (_selectedItemIds.contains(id)) {
+              _selectedItemIds.remove(id);
+            } else {
+              _selectedItemIds.add(id);
+            }
+          });
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.border, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Header row: icon + title + collapse/check toggle
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE2E8F0),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isTodo
+                        ? Icons.fact_check_outlined
+                        : Icons.description_outlined,
+                    color: AppTheme.subtitleText,
+                    size: 16,
+                  ),
                 ),
-                child: Icon(
-                  isTodo
-                      ? Icons.fact_check_outlined
-                      : Icons.description_outlined,
-                  color: AppTheme.subtitleText,
-                  size: 16,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: isEditing
-                      ? TextField(
-                          controller: editController,
-                          autofocus: true,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppTheme.darkText,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: isTodo
-                                ? 'Tên danh sách...'
-                                : 'Nhập ghi chú...',
-                            hintStyle: const TextStyle(
-                              color: Colors.black26,
-                              fontSize: 13,
-                            ),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onSubmitted: (val) async {
-                            final cleanVal = val.trim();
-                            String finalVal = cleanVal.isEmpty
-                                ? (isTodo
-                                      ? 'Danh sách công việc'
-                                      : 'Ghi chú mới')
-                                : cleanVal;
-                            if (isTodo) finalVal = '[TODO] $finalVal';
-                            await DatabaseService().updateSavedItemText(
-                              id,
-                              finalVal,
-                            );
-                            setState(() => _editingNoteId = null);
-                            await _loadData(silent: true);
-                          },
-                        )
-                      : GestureDetector(
-                          onTap: () => setState(() => _editingNoteId = id),
-                          child: Text(
-                            isTodo
-                                ? (displayTitle.isEmpty
-                                      ? 'Danh sách công việc'
-                                      : displayTitle)
-                                : (text.isEmpty
-                                      ? 'Thêm ghi chú tại đây'
-                                      : text),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: isEditing
+                        ? TextField(
+                            controller: editController,
+                            autofocus: true,
                             style: const TextStyle(
                               fontSize: 13,
                               color: AppTheme.darkText,
                               fontWeight: FontWeight.w500,
                             ),
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Right-side button: save / all-done / collapse-toggle
-              if (isEditing)
-                GestureDetector(
-                  onTap: () async {
-                    final cleanVal = editController?.text.trim() ?? '';
-                    String finalVal = cleanVal.isEmpty
-                        ? (isTodo ? 'Danh sách công việc' : 'Ghi chú mới')
-                        : cleanVal;
-                    if (isTodo) finalVal = '[TODO] $finalVal';
-                    await DatabaseService().updateSavedItemText(id, finalVal);
-                    setState(() => _editingNoteId = null);
-                    await _loadData(silent: true);
-                  },
-                  child: const Icon(
-                    Icons.check_rounded,
-                    color: AppTheme.green,
-                    size: 22,
-                  ),
-                )
-              else if (isTodo)
-                GestureDetector(
-                  onTap: () {
-                    final newDone = !allDone;
-                    final updated = todoList
-                        .map((item) => {...item as Map, 'done': newDone})
-                        .toList();
-                    DatabaseService()
-                        .updateSavedItemTodoItems(id, updated)
-                        .then((_) => _loadData(silent: true));
-                  },
-                  child: Icon(
-                    allDone ? Icons.check_box : Icons.check_box_outline_blank,
-                    color: allDone ? AppTheme.primary : AppTheme.subtitleText,
-                    size: 20,
-                  ),
-                )
-              else if (isCollapsed)
-                GestureDetector(
-                  onTap: () => DatabaseService()
-                      .updateSavedItemCollapse(id, false)
-                      .then((_) => _loadData(silent: true)),
-                  child: const Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    color: AppTheme.subtitleText,
-                    size: 20,
-                  ),
-                ),
-            ],
-          ),
-
-          // ── Todo items list (when not collapsed)
-          if (isTodo && todoList.isNotEmpty && !isCollapsed) ...[
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.only(left: 36),
-              child: Column(
-                children: todoList.map((item) {
-                  final String itemText = item['text'] ?? '';
-                  final bool done = item['done'] == true;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () {
-                            final updated = todoList.map((it) {
-                              if (it['text'] == itemText) {
-                                return {...it as Map, 'done': !done};
-                              }
-                              return it;
-                            }).toList();
-                            DatabaseService()
-                                .updateSavedItemTodoItems(id, updated)
-                                .then((_) => _loadData(silent: true));
-                          },
-                          child: Icon(
-                            done
-                                ? Icons.check_circle
-                                : Icons.radio_button_unchecked,
-                            color: done
-                                ? AppTheme.primary
-                                : AppTheme.subtitleText,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            itemText,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: done
-                                  ? AppTheme.subtitleText
-                                  : AppTheme.darkText,
-                              decoration: done
-                                  ? TextDecoration.lineThrough
-                                  : null,
+                            decoration: InputDecoration(
+                              hintText: isTodo
+                                  ? 'Tên danh sách...'
+                                  : 'Nhập ghi chú...',
+                              hintStyle: const TextStyle(
+                                color: Colors.black26,
+                                fontSize: 13,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
                             ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            final updated = List.from(todoList)
-                              ..removeWhere((it) => it['text'] == itemText);
-                            DatabaseService()
-                                .updateSavedItemTodoItems(id, updated)
-                                .then((_) => _loadData(silent: true));
-                          },
-                          child: const Icon(
-                            Icons.close,
-                            size: 16,
-                            color: Colors.redAccent,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
-
-          // ── Add todo item input (when not collapsed)
-          if (isTodo && !isCollapsed) ...[
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.only(left: 36),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.radio_button_unchecked,
-                    color: AppTheme.subtitleText,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      decoration: const InputDecoration(
-                        hintText: 'Thêm một số mục',
-                        hintStyle: TextStyle(
-                          color: AppTheme.subtitleText,
-                          fontSize: 13,
-                        ),
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.symmetric(vertical: 4),
-                      ),
-                      onSubmitted: (val) {
-                        final cleanVal = val.trim();
-                        if (cleanVal.isNotEmpty &&
-                            !todoList.any((it) => it['text'] == cleanVal)) {
-                          final updated = List.from(todoList)
-                            ..add({'text': cleanVal, 'done': false});
-                          DatabaseService()
-                              .updateSavedItemTodoItems(id, updated)
-                              .then((_) => _loadData(silent: true));
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          // ── Collapsed emoji display for notes
-          if (!isTodo && isCollapsed && reactions.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: reactions.map((emoji) {
-                return GestureDetector(
-                  onTap: () {
-                    final updated = List.from(reactions)..remove(emoji);
-                    DatabaseService()
-                        .updateSavedItemReactions(id, updated)
-                        .then((_) => _loadData(silent: true));
-                  },
-                  child: _emojiChip(emoji as String),
-                );
-              }).toList(),
-            ),
-          ],
-
-          // ── Toolbar (shown when expanded OR always for todo)
-          if (!isCollapsed || isTodo) ...[
-            const SizedBox(height: 8),
-            const Divider(color: AppTheme.border, height: 1, thickness: 0.5),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: isTodo
-                      // Todo left side: "Danh sách làm sẵn" button
-                      ? GestureDetector(
-                          onTap: () => _showTemplateBottomSheet(id, todoList),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.card_travel_outlined,
-                                color: AppTheme.subtitleText,
-                                size: 16,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Danh sách làm sẵn',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.darkText,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      // Note left side: emoji chips + picker button
-                      : Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            ...reactions.map((emoji) {
-                              return GestureDetector(
-                                onTap: () {
-                                  final updated = List.from(reactions)
-                                    ..remove(emoji);
-                                  DatabaseService()
-                                      .updateSavedItemReactions(id, updated)
-                                      .then((_) => _loadData(silent: true));
-                                },
-                                child: _emojiChip(emoji as String),
+                            onSubmitted: (val) async {
+                              final cleanVal = val.trim();
+                              String finalVal = cleanVal.isEmpty
+                                  ? (isTodo
+                                        ? 'Danh sách công việc'
+                                        : 'Ghi chú mới')
+                                  : cleanVal;
+                              if (isTodo) finalVal = '[TODO] $finalVal';
+                              await DatabaseService().updateSavedItemText(
+                                id,
+                                finalVal,
                               );
-                            }),
-                            // Emoji picker button
-                            GestureDetector(
-                              onTap: () => _showEmojiPickerSheet(id, reactions),
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: AppTheme.border),
-                                ),
-                                child: const Icon(
-                                  Icons.sentiment_satisfied_alt_outlined,
-                                  color: AppTheme.subtitleText,
-                                  size: 16,
-                                ),
+                              setState(() => _editingNoteId = null);
+                              await _loadData(silent: true);
+                            },
+                          )
+                        : GestureDetector(
+                            onTap: () => setState(() => _editingNoteId = id),
+                            child: Text(
+                              isTodo
+                                  ? (displayTitle.isEmpty
+                                        ? 'Danh sách công việc'
+                                        : displayTitle)
+                                  : (text.isEmpty
+                                        ? 'Thêm ghi chú tại đây'
+                                        : text),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppTheme.darkText,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                          ],
-                        ),
-                ),
-                // Right: delete, drag, collapse
-                GestureDetector(
-                  onTap: () => _removePlaceDetail(id, text, isSavedPlace: true),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Icon(
-                      Icons.delete_outline_rounded,
-                      color: AppTheme.subtitleText,
-                      size: 18,
-                    ),
+                          ),
                   ),
                 ),
-                ReorderableDragStartListener(
-                  index: listIdx,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4),
-                    child: Icon(
-                      Icons.drag_indicator_rounded,
-                      color: AppTheme.subtitleText,
-                      size: 18,
+                const SizedBox(width: 8),
+                // Right-side button: save / all-done / collapse-toggle
+                if (isEditing)
+                  GestureDetector(
+                    onTap: () async {
+                      final cleanVal = editController?.text.trim() ?? '';
+                      String finalVal = cleanVal.isEmpty
+                          ? (isTodo ? 'Danh sách công việc' : 'Ghi chú mới')
+                          : cleanVal;
+                      if (isTodo) finalVal = '[TODO] $finalVal';
+                      await DatabaseService().updateSavedItemText(id, finalVal);
+                      setState(() => _editingNoteId = null);
+                      await _loadData(silent: true);
+                    },
+                    child: const Icon(
+                      Icons.check_rounded,
+                      color: AppTheme.green,
+                      size: 22,
                     ),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () => DatabaseService()
-                      .updateSavedItemCollapse(id, !isCollapsed)
-                      .then((_) => _loadData(silent: true)),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 4, right: 2),
+                  )
+                else if (isTodo)
+                  GestureDetector(
+                    onTap: () {
+                      final newDone = !allDone;
+                      final updated = todoList
+                          .map((item) => {...item as Map, 'done': newDone})
+                          .toList();
+                      DatabaseService()
+                          .updateSavedItemTodoItems(id, updated)
+                          .then((_) => _loadData(silent: true));
+                    },
                     child: Icon(
-                      isCollapsed
-                          ? Icons.keyboard_arrow_down_rounded
-                          : Icons.keyboard_arrow_up_rounded,
+                      allDone ? Icons.check_box : Icons.check_box_outline_blank,
+                      color: allDone ? AppTheme.primary : AppTheme.subtitleText,
+                      size: 20,
+                    ),
+                  )
+                else if (isCollapsed)
+                  GestureDetector(
+                    onTap: () => DatabaseService()
+                        .updateSavedItemCollapse(id, false)
+                        .then((_) => _loadData(silent: true)),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
                       color: AppTheme.subtitleText,
                       size: 20,
                     ),
                   ),
-                ),
+                if (_isSelectionMode)
+                  IgnorePointer(
+                    child: Checkbox(
+                      value: _selectedItemIds.contains(id),
+                      onChanged: (_) {},
+                      activeColor: AppTheme.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
               ],
             ),
+
+            // ── Todo items list (when not collapsed)
+            if (isTodo && todoList.isNotEmpty && !isCollapsed) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(left: 36),
+                child: Column(
+                  children: todoList.map((item) {
+                    final String itemText = item['text'] ?? '';
+                    final bool done = item['done'] == true;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              final updated = todoList.map((it) {
+                                if (it['text'] == itemText) {
+                                  return {...it as Map, 'done': !done};
+                                }
+                                return it;
+                              }).toList();
+                              DatabaseService()
+                                  .updateSavedItemTodoItems(id, updated)
+                                  .then((_) => _loadData(silent: true));
+                            },
+                            child: Icon(
+                              done
+                                  ? Icons.check_circle
+                                  : Icons.radio_button_unchecked,
+                              color: done
+                                  ? AppTheme.primary
+                                  : AppTheme.subtitleText,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              itemText,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: done
+                                    ? AppTheme.subtitleText
+                                    : AppTheme.darkText,
+                                decoration: done
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              final updated = List.from(todoList)
+                                ..removeWhere((it) => it['text'] == itemText);
+                              DatabaseService()
+                                  .updateSavedItemTodoItems(id, updated)
+                                  .then((_) => _loadData(silent: true));
+                            },
+                            child: const Icon(
+                              Icons.close,
+                              size: 16,
+                              color: Colors.redAccent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+
+            // ── Add todo item input (when not collapsed)
+            if (isTodo && !isCollapsed) ...[
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.only(left: 36),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.radio_button_unchecked,
+                      color: AppTheme.subtitleText,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        decoration: const InputDecoration(
+                          hintText: 'Thêm một số mục',
+                          hintStyle: TextStyle(
+                            color: AppTheme.subtitleText,
+                            fontSize: 13,
+                          ),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 4),
+                        ),
+                        onSubmitted: (val) {
+                          final cleanVal = val.trim();
+                          if (cleanVal.isNotEmpty &&
+                              !todoList.any((it) => it['text'] == cleanVal)) {
+                            final updated = List.from(todoList)
+                              ..add({'text': cleanVal, 'done': false});
+                            DatabaseService()
+                                .updateSavedItemTodoItems(id, updated)
+                                .then((_) => _loadData(silent: true));
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // ── Collapsed emoji display for notes
+            if (!isTodo && isCollapsed && reactions.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: reactions.map((emoji) {
+                  return GestureDetector(
+                    onTap: () {
+                      final updated = List.from(reactions)..remove(emoji);
+                      DatabaseService()
+                          .updateSavedItemReactions(id, updated)
+                          .then((_) => _loadData(silent: true));
+                    },
+                    child: _emojiChip(emoji as String),
+                  );
+                }).toList(),
+              ),
+            ],
+
+            // ── Toolbar (shown when expanded OR always for todo)
+            if (!isCollapsed || isTodo) ...[
+              const SizedBox(height: 8),
+              const Divider(color: AppTheme.border, height: 1, thickness: 0.5),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: isTodo
+                        // Todo left side: "Danh sách làm sẵn" button
+                        ? GestureDetector(
+                            onTap: () => _showTemplateBottomSheet(id, todoList),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.card_travel_outlined,
+                                  color: AppTheme.subtitleText,
+                                  size: 16,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Danh sách làm sẵn',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.darkText,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        // Note left side: emoji chips + picker button
+                        : Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              ...reactions.map((emoji) {
+                                return GestureDetector(
+                                  onTap: () {
+                                    final updated = List.from(reactions)
+                                      ..remove(emoji);
+                                    DatabaseService()
+                                        .updateSavedItemReactions(id, updated)
+                                        .then((_) => _loadData(silent: true));
+                                  },
+                                  child: _emojiChip(emoji as String),
+                                );
+                              }),
+                              // Emoji picker button
+                              GestureDetector(
+                                onTap: () =>
+                                    _showEmojiPickerSheet(id, reactions),
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: AppTheme.border),
+                                  ),
+                                  child: const Icon(
+                                    Icons.sentiment_satisfied_alt_outlined,
+                                    color: AppTheme.subtitleText,
+                                    size: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                  // Right: delete, drag, collapse
+                  GestureDetector(
+                    onTap: () =>
+                        _removePlaceDetail(id, text, isSavedPlace: true),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 6),
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        color: AppTheme.subtitleText,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                  ReorderableDragStartListener(
+                    index: listIdx,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4),
+                      child: Icon(
+                        Icons.drag_indicator_rounded,
+                        color: AppTheme.subtitleText,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => DatabaseService()
+                        .updateSavedItemCollapse(id, !isCollapsed)
+                        .then((_) => _loadData(silent: true)),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4, right: 2),
+                      child: Icon(
+                        isCollapsed
+                            ? Icons.keyboard_arrow_down_rounded
+                            : Icons.keyboard_arrow_up_rounded,
+                        color: AppTheme.subtitleText,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -2412,145 +2874,193 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
       extraInfo = 'Mở cửa: $open - $close';
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(8),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF2563EB),
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    '$index',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+    return GestureDetector(
+      onTap: () {
+        if (_isSelectionMode && detail['id'] != null) {
+          setState(() {
+            final id = detail['id'] as int;
+            if (_selectedItemIds.contains(id)) {
+              _selectedItemIds.remove(id);
+            } else {
+              _selectedItemIds.add(id);
+            }
+          });
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppTheme.border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(8),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color:
+                          _sectionColors[detail['section']] ??
+                          const Color(0xFF2563EB),
+                      shape: BoxShape.circle,
                     ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          color: AppTheme.darkText,
-                        ),
-                      ),
-                      if (extraInfo != null) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.access_time_rounded,
-                              color: AppTheme.subtitleText,
-                              size: 12,
+                    alignment: Alignment.center,
+                    child:
+                        (_sectionIcons[detail['section']] == null ||
+                            _sectionIcons[detail['section']] ==
+                                Icons.looks_one_rounded)
+                        ? Text(
+                            '$index',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              extraInfo,
-                              style: const TextStyle(
+                          )
+                        : Icon(
+                            _sectionIcons[detail['section']],
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: AppTheme.darkText,
+                          ),
+                        ),
+                        if (extraInfo != null) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.access_time_rounded,
                                 color: AppTheme.subtitleText,
-                                fontSize: 11,
+                                size: 12,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                extraInfo,
+                                style: const TextStyle(
+                                  color: AppTheme.subtitleText,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                categoryName,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Color(0xFF475569),
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ],
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              categoryName,
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: Color(0xFF475569),
-                                fontWeight: FontWeight.bold,
-                              ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Stack(
+              alignment: Alignment.topRight,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    image,
+                    width: 80,
+                    height: 80,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        const Icon(Icons.image, size: 80),
+                  ),
+                ),
+                _isSelectionMode
+                    ? IgnorePointer(
+                        child: Container(
+                          margin: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: _selectedItemIds.contains(detail['id']),
+                            onChanged: (_) {},
+                            activeColor: AppTheme.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
                             ),
                           ),
-                        ],
+                        ),
+                      )
+                    : GestureDetector(
+                        onTap: () => _removePlaceDetail(
+                          detail['id'],
+                          name,
+                          isSavedPlace: true,
+                        ),
+                        child: Container(
+                          margin: const EdgeInsets.all(4),
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(220),
+                            shape: BoxShape.circle,
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black12, blurRadius: 4),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 12,
+                            color: Colors.redAccent,
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                ),
               ],
             ),
-          ),
-          const SizedBox(width: 12),
-          Stack(
-            alignment: Alignment.topRight,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  image,
-                  width: 80,
-                  height: 80,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
-                      const Icon(Icons.image, size: 80),
-                ),
-              ),
-              GestureDetector(
-                onTap: () =>
-                    _removePlaceDetail(detail['id'], name, isSavedPlace: true),
-                child: Container(
-                  margin: const EdgeInsets.all(4),
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(220),
-                    shape: BoxShape.circle,
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black12, blurRadius: 4),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.close_rounded,
-                    size: 12,
-                    color: Colors.redAccent,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2592,6 +3102,10 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                   borderRadius: BorderRadius.circular(16),
                   clipBehavior: Clip.antiAlias,
                   child: ExpansionTile(
+                    controller: _expansionControllers.putIfAbsent(
+                      section,
+                      () => ExpansionTileController(),
+                    ),
                     initiallyExpanded: index == 0,
                     tilePadding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -2599,27 +3113,292 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                     ),
                     iconColor: AppTheme.darkText,
                     collapsedIconColor: AppTheme.subtitleText,
-                    leading: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: AppTheme.darkText,
-                    ),
-                    trailing: const Icon(
-                      Icons.more_horiz_rounded,
-                      color: AppTheme.subtitleText,
-                    ),
-                    title: Text(
-                      section,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: index == 0
-                            ? AppTheme.darkText
-                            : AppTheme.subtitleText,
-                        fontStyle: index == 0
-                            ? FontStyle.normal
-                            : FontStyle.italic,
+                    leading: _isSelectionMode
+                        ? Checkbox(
+                            value: _selectedSections.contains(section),
+                            onChanged: (val) {
+                              setState(() {
+                                if (val == true) {
+                                  _selectedSections.add(section);
+                                  for (var place in _savedPlaces) {
+                                    if (place['section'] == section &&
+                                        place['id'] != null) {
+                                      _selectedItemIds.add(place['id'] as int);
+                                    }
+                                  }
+                                } else {
+                                  _selectedSections.remove(section);
+                                  for (var place in _savedPlaces) {
+                                    if (place['section'] == section &&
+                                        place['id'] != null) {
+                                      _selectedItemIds.remove(
+                                        place['id'] as int,
+                                      );
+                                    }
+                                  }
+                                }
+                              });
+                            },
+                            activeColor: AppTheme.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          )
+                        : const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            color: AppTheme.darkText,
+                          ),
+                    trailing: Theme(
+                      data: Theme.of(context).copyWith(
+                        splashColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
+                      ),
+                      child: PopupMenuButton<String>(
+                        icon: const Icon(
+                          Icons.more_horiz_rounded,
+                          color: AppTheme.subtitleText,
+                        ),
+                        offset: const Offset(0, 40),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        color: Colors.white,
+                        elevation: 4,
+                        onSelected: (value) {
+                          if (value == 'edit') {
+                            setState(() {
+                              _editingSection = section;
+                              _sectionTitleController.text = section;
+                            });
+                            _sectionTitleFocusNode.requestFocus();
+                          } else if (value == 'color') {
+                            _showSectionStyleSheet(context, section);
+                          } else if (value == 'reorder') {
+                            _showSectionStyleSheet(
+                              context,
+                              section,
+                              initialTabIndex: 1,
+                            );
+                          } else if (value == 'collapse') {
+                            for (var controller
+                                in _expansionControllers.values) {
+                              if (controller.isExpanded) {
+                                controller.collapse();
+                              }
+                            }
+                          } else if (value == 'delete') {
+                            setState(() {
+                              _sectionNames.remove(section);
+                              _sectionColors.remove(section);
+                              _sectionIcons.remove(section);
+                              _savedPlaces.removeWhere(
+                                (place) => place['section'] == section,
+                              );
+                              _expansionControllers.remove(section);
+                            });
+                            final itId = _itineraryData['id'] as int;
+                            DatabaseService().deleteItinerarySection(
+                              itId,
+                              section,
+                            );
+                            DatabaseService().deleteSavedPlacesBySection(
+                              itId,
+                              section,
+                            );
+                            _syncSectionsToDatabase();
+                          } else if (value == 'select_all') {
+                            setState(() {
+                              _isSelectionMode = true;
+                              _selectedSections.add(section);
+                              for (var place in _savedPlaces) {
+                                if (place['section'] == section &&
+                                    place['id'] != null) {
+                                  _selectedItemIds.add(place['id'] as int);
+                                }
+                              }
+                            });
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Tính năng đang phát triển ($value)',
+                                ),
+                                duration: const Duration(seconds: 1),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'edit',
+                            height: 48,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.edit_rounded,
+                                  size: 20,
+                                  color: AppTheme.darkText,
+                                ),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Chỉnh sửa tiêu đề',
+                                  style: TextStyle(
+                                    color: AppTheme.darkText,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'color',
+                            height: 48,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.palette_rounded,
+                                  size: 20,
+                                  color: AppTheme.darkText,
+                                ),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Thay đổi màu sắc hoặc biểu tượng',
+                                  style: TextStyle(
+                                    color: AppTheme.darkText,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'select_all',
+                            height: 48,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.check_box_outlined,
+                                  size: 20,
+                                  color: AppTheme.darkText,
+                                ),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Chọn tất cả',
+                                  style: TextStyle(
+                                    color: AppTheme.darkText,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'collapse',
+                            height: 48,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.close_fullscreen_rounded,
+                                  size: 20,
+                                  color: AppTheme.darkText,
+                                ),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Thu gọn tất cả các phần',
+                                  style: TextStyle(
+                                    color: AppTheme.darkText,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'delete',
+                            height: 48,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 20,
+                                  color: AppTheme.darkText,
+                                ),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Xóa phần',
+                                  style: TextStyle(
+                                    color: AppTheme.darkText,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
+                            value: 'reorder',
+                            height: 48,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.menu_rounded,
+                                  size: 20,
+                                  color: AppTheme.darkText,
+                                ),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Sắp xếp lại các phần',
+                                  style: TextStyle(
+                                    color: AppTheme.darkText,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                    title: _editingSection == section
+                        ? TextField(
+                            controller: _sectionTitleController,
+                            focusNode: _sectionTitleFocusNode,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: index == 0
+                                  ? AppTheme.darkText
+                                  : AppTheme.subtitleText,
+                            ),
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                              border: InputBorder.none,
+                            ),
+                            onSubmitted: (newValue) =>
+                                _saveSectionTitle(section, newValue),
+                            onTapOutside: (_) => _saveSectionTitle(
+                              section,
+                              _sectionTitleController.text,
+                            ),
+                          )
+                        : Text(
+                            section,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: index == 0
+                                  ? AppTheme.darkText
+                                  : AppTheme.subtitleText,
+                            ),
+                          ),
                     children: [
                       Padding(
                         padding: const EdgeInsets.symmetric(

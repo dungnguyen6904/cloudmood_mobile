@@ -119,3 +119,13 @@ CREATE TABLE public.ChecklistTemplateItem (
   CONSTRAINT ChecklistTemplateItem_pkey PRIMARY KEY (id),
   CONSTRAINT fk_item_category FOREIGN KEY (categoryId) REFERENCES public.ChecklistTemplateCategory(id)
 );
+CREATE TABLE public.ItinerarySection (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  itineraryId bigint NOT NULL,
+  name character varying NOT NULL,
+  colorCode character varying,
+  iconCode integer,
+  sortOrder integer NOT NULL DEFAULT 0,
+  CONSTRAINT ItinerarySection_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_section_itinerary FOREIGN KEY (itineraryId) REFERENCES public.Itinerary(id)
+);

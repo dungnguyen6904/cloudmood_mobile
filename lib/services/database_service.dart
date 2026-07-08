@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -250,7 +251,7 @@ class DatabaseService {
     try {
       final response = await _adminClient
           .from('Itinerary')
-          .select('*, ItineraryDetail(*, Place(*, Category(*))), ItinerarySavedPlace(*, Place(*, Category(*)))')
+          .select('*, ItinerarySection(*), ItineraryDetail(*, Place(*, Category(*))), ItinerarySavedPlace(*, Place(*, Category(*)))')
           .eq('userId', userId)
           .order('id', ascending: false);
       return List<Map<String, dynamic>>.from(response);
@@ -292,6 +293,15 @@ class DatabaseService {
           .insert(data)
           .select()
           .single();
+          
+      // Insert default section "Địa điểm tham quan" for the new itinerary
+      await _adminClient.from('ItinerarySection').insert({
+        'itineraryId': response['id'],
+        'name': 'Địa điểm tham quan',
+        'colorCode': '4282057462', // Default blue color
+        'iconCode': Icons.looks_one_rounded.codePoint,
+        'sortOrder': 0,
+      });
           
       refreshTrigger.value++; // Trigger reactive update
       return response;
@@ -384,7 +394,7 @@ class DatabaseService {
     try {
       final response = await _adminClient
           .from('Itinerary')
-          .select('*, ItineraryDetail(*, Place(*, Category(*))), ItinerarySavedPlace(*, Place(*, Category(*)))')
+          .select('*, ItinerarySection(*), ItineraryDetail(*, Place(*, Category(*))), ItinerarySavedPlace(*, Place(*, Category(*)))')
           .eq('id', itineraryId)
           .single();
       return response;
@@ -440,6 +450,69 @@ class DatabaseService {
     }
   }
 
+  /// Upserts a section for an itinerary (inserts if not exists, otherwise updates)
+  Future<bool> upsertItinerarySection({
+    required int itineraryId,
+    required String name,
+    required String colorCode,
+    required int iconCode,
+    int sortOrder = 0,
+  }) async {
+    try {
+      // First, try to find if it exists
+      final existing = await _adminClient
+          .from('ItinerarySection')
+          .select('id')
+          .eq('itineraryId', itineraryId)
+          .eq('name', name)
+          .maybeSingle();
+
+      if (existing != null) {
+        // Update
+        await _adminClient
+            .from('ItinerarySection')
+            .update({
+              'colorCode': colorCode,
+              'iconCode': iconCode,
+              'sortOrder': sortOrder,
+            })
+            .eq('id', existing['id']);
+      } else {
+        // Insert
+        await _adminClient
+            .from('ItinerarySection')
+            .insert({
+              'itineraryId': itineraryId,
+              'name': name,
+              'colorCode': colorCode,
+              'iconCode': iconCode,
+              'sortOrder': sortOrder,
+            });
+      }
+      refreshTrigger.value++;
+      return true;
+    } catch (e) {
+      debugPrint('Error upserting itinerary section: $e');
+      return false;
+    }
+  }
+
+  /// Deletes an itinerary section by name
+  Future<bool> deleteItinerarySection(int itineraryId, String name) async {
+    try {
+      await _adminClient
+          .from('ItinerarySection')
+          .delete()
+          .eq('itineraryId', itineraryId)
+          .eq('name', name);
+      refreshTrigger.value++;
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting itinerary section: $e');
+      return false;
+    }
+  }
+
   /// Adds a place or note to an itinerary's saved places (Overview)
   Future<Map<String, dynamic>?> addPlaceToSaved({
     required int itineraryId,
@@ -483,6 +556,22 @@ class DatabaseService {
     }
   }
 
+  /// Deletes all saved places or notes in a specific section
+  Future<bool> deleteSavedPlacesBySection(int itineraryId, String section) async {
+    try {
+      await _adminClient
+          .from('ItinerarySavedPlace')
+          .delete()
+          .eq('itineraryId', itineraryId)
+          .eq('section', section);
+      refreshTrigger.value++;
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting saved places by section: $e');
+      return false;
+    }
+  }
+
   /// Deletes a place or note from saved places
   Future<bool> deletePlaceFromSaved(int savedId) async {
     try {
@@ -494,6 +583,141 @@ class DatabaseService {
       return true;
     } catch (e) {
       debugPrint('Error deleting from saved list: $e');
+      return false;
+    }
+  }
+
+  /// Deletes multiple saved places
+  Future<bool> deleteMultipleSavedPlaces(List<int> itemIds) async {
+    try {
+      await _adminClient
+          .from('ItinerarySavedPlace')
+          .delete()
+          .inFilter('id', itemIds);
+      refreshTrigger.value++;
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting multiple saved places: $e');
+      return false;
+    }
+  }
+
+  /// Moves multiple saved places to a new section
+  Future<bool> moveSavedPlaces(List<int> itemIds, String targetSection) async {
+    try {
+      final itemsToMove = await _adminClient
+          .from('ItinerarySavedPlace')
+          .select('id, itineraryId, placeId, noteText')
+          .inFilter('id', itemIds);
+          
+      if (itemsToMove.isEmpty) return true;
+
+      final itId = itemsToMove.first['itineraryId'] as int;
+
+      final existingItems = await _adminClient
+          .from('ItinerarySavedPlace')
+          .select('placeId')
+          .eq('itineraryId', itId)
+          .eq('section', targetSection)
+          .not('placeId', 'is', null);
+
+      final existingPlaceIds = existingItems
+          .map((item) => item['placeId'] as int)
+          .toSet();
+
+      final idsToMove = <int>[];
+      final idsToDelete = <int>[]; // to simulate move if it's already there
+      final newPlaceIdsInTarget = <int>{};
+
+      for (var item in itemsToMove) {
+        final isNote = item['placeId'] == null;
+        final placeId = item['placeId'] as int?;
+        
+        if (!isNote && placeId != null) {
+          if (existingPlaceIds.contains(placeId) || newPlaceIdsInTarget.contains(placeId)) {
+            idsToDelete.add(item['id'] as int);
+            continue;
+          }
+          newPlaceIdsInTarget.add(placeId);
+        }
+        idsToMove.add(item['id'] as int);
+      }
+
+      if (idsToMove.isNotEmpty) {
+        await _adminClient
+            .from('ItinerarySavedPlace')
+            .update({'section': targetSection})
+            .inFilter('id', idsToMove);
+      }
+      if (idsToDelete.isNotEmpty) {
+        await _adminClient
+            .from('ItinerarySavedPlace')
+            .delete()
+            .inFilter('id', idsToDelete);
+      }
+      
+      refreshTrigger.value++;
+      return true;
+    } catch (e) {
+      debugPrint('Error moving saved places: $e');
+      return false;
+    }
+  }
+
+  /// Copies multiple saved places to a new section
+  Future<bool> copySavedPlaces(List<int> itemIds, String targetSection) async {
+    try {
+      // First, fetch the items to duplicate
+      final itemsToCopy = await _adminClient
+          .from('ItinerarySavedPlace')
+          .select()
+          .inFilter('id', itemIds);
+          
+      if (itemsToCopy.isEmpty) return true;
+
+      final itId = itemsToCopy.first['itineraryId'] as int;
+
+      final existingItems = await _adminClient
+          .from('ItinerarySavedPlace')
+          .select('placeId')
+          .eq('itineraryId', itId)
+          .eq('section', targetSection)
+          .not('placeId', 'is', null);
+
+      final existingPlaceIds = existingItems
+          .map((item) => item['placeId'] as int)
+          .toSet();
+
+      final newPlaceIdsInTarget = <int>{};
+      
+      // Modify them for insertion
+      final List<Map<String, dynamic>> newItems = [];
+      for (var item in itemsToCopy) {
+        final isNote = item['placeId'] == null;
+        final placeId = item['placeId'] as int?;
+
+        if (!isNote && placeId != null) {
+          if (existingPlaceIds.contains(placeId) || newPlaceIdsInTarget.contains(placeId)) {
+            continue; // Skip copying duplicate places
+          }
+          newPlaceIdsInTarget.add(placeId);
+        }
+
+        final Map<String, dynamic> newItem = Map<String, dynamic>.from(item as Map);
+        newItem.remove('id'); // Remove id to let DB auto-generate
+        newItem.remove('createdAt');
+        newItem['section'] = targetSection;
+        newItems.add(newItem);
+      }
+
+      if (newItems.isNotEmpty) {
+        await _adminClient.from('ItinerarySavedPlace').insert(newItems);
+      }
+      refreshTrigger.value++;
+      
+      return true;
+    } catch (e) {
+      debugPrint('Error copying saved places: $e');
       return false;
     }
   }
