@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // ─── Brand Colors ────────────────────────────────────────────────────────────
@@ -63,7 +64,8 @@ class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
-      fontFamily: 'Roboto',
+      textTheme: GoogleFonts.robotoTextTheme(),
+      fontFamily: GoogleFonts.roboto().fontFamily,
       colorScheme: const ColorScheme(
         brightness: Brightness.light,
         primary: primary,
