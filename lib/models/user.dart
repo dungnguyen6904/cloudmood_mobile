@@ -36,7 +36,7 @@ class UserModel {
       id: map['id'] as int,
       fullName: map['fullName'] as String,
       email: map['email'] as String,
-      password: map['password'] as String,
+      password: map['password'] as String? ?? '',
       avatar: map['avatar'] as String?,
       role: map['role'] as bool,
       createdAt: DateTime.parse(map['createdAt'] as String),

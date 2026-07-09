@@ -15,13 +15,12 @@ Future<XFile?> _selectImage(BuildContext context) async {
     context: context,
     backgroundColor: Colors.transparent,
     builder: (context) {
-      return Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        child: Column(
+      return Material(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
@@ -87,6 +86,7 @@ Future<XFile?> _selectImage(BuildContext context) async {
             ),
             const SizedBox(height: 12),
           ],
+        ),
         ),
       );
     },

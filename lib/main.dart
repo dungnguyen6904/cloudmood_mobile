@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
@@ -25,11 +24,6 @@ void main() async {
 
   // Load environment variables from .env
   await dotenv.load(fileName: ".env");
-
-  await Supabase.initialize(
-    url: 'https://mrulzaiktzljosdgfivt.supabase.co',
-    publishableKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
-  );
 
   // Seed initial categories & places in Supabase if empty
   await DatabaseService().checkAndSeedData();

@@ -111,7 +111,7 @@ class _ItineraryStyleSheetState extends State<ItineraryStyleSheet> {
             rawData: d,
           ));
         } else {
-          final pName = d['Place']?['name'] ?? 'Địa điểm';
+          final pName = d['place']?['name'] ?? 'Địa điểm';
           _flattenedItems.add(ItineraryFlatItem(
             id: 'place_${d['id']}',
             type: 'place',

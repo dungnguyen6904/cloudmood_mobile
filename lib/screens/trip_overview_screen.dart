@@ -391,7 +391,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     if (refreshed != null) {
       _itineraryData = refreshed;
       final rawDetails = List<Map<String, dynamic>>.from(
-        refreshed['ItineraryDetail'] ?? [],
+        refreshed['details'] ?? [],
       );
       rawDetails.sort((a, b) {
         final int orderA = a['sortOrder'] ?? 0;
@@ -406,7 +406,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
       _details = rawDetails;
 
       final rawSaved = List<Map<String, dynamic>>.from(
-        refreshed['ItinerarySavedPlace'] ?? [],
+        refreshed['savedPlaces'] ?? [],
       );
       rawSaved.sort((a, b) {
         final int orderA = a['sortOrder'] ?? 0;
@@ -429,7 +429,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     }
 
     // Restore custom section names, colors, and icons from Database
-    final savedSections = _itineraryData['ItinerarySection'] as List<dynamic>?;
+    final savedSections = _itineraryData['sections'] as List<dynamic>?;
     _sectionNames.clear();
     if (savedSections != null && savedSections.isNotEmpty) {
       // Sort by sortOrder
@@ -446,10 +446,13 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
           _searchResults.putIfAbsent(name, () => []);
         }
         _sectionColors[name] = Color(int.parse(sec['colorCode'] as String));
-        _sectionIcons[name] = IconData(
-          sec['iconCode'] as int,
-          fontFamily: 'MaterialIcons',
-        );
+        final int rawCode = sec['iconCode'] as int;
+        _sectionIcons[name] = rawCode == 983363 
+            ? Icons.looks_one_rounded 
+            : IconData(
+                rawCode,
+                fontFamily: 'MaterialIcons',
+              );
       }
     }
 
@@ -1413,7 +1416,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                       ),
                       MarkerLayer(
                         markers: _savedPlaces.map((savedPlace) {
-                          final p = savedPlace['Place'] as Map<String, dynamic>?;
+                          final p = savedPlace['place'] as Map<String, dynamic>?;
                           if (p == null || p['latitude'] == null || p['longitude'] == null) {
                             return null;
                           }
@@ -3365,8 +3368,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
   }
 
   Widget _buildSavedPlaceCard(Map<String, dynamic> detail, int index) {
-    final place = detail['Place'] ?? {};
-    final categoryName = place['Category']?['name'] ?? 'Điểm tham quan';
+    final place = detail['place'] ?? {};
+    final categoryName = place['category']?['name'] ?? 'Điểm tham quan';
     final String name = place['name'] ?? 'Địa điểm';
     final String image = place['image'] ?? '';
 
@@ -3453,8 +3456,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                     alignment: Alignment.center,
                     child:
                         (_sectionIcons[detail['section']] == null ||
-                            _sectionIcons[detail['section']] ==
-                                Icons.looks_one_rounded)
+                            _sectionIcons[detail['section']]?.codePoint ==
+                                Icons.looks_one_rounded.codePoint)
                         ? Text(
                             '$index',
                             style: const TextStyle(
@@ -4321,7 +4324,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
 
     final Map<int, Map<String, dynamic>> uniquePlacesMap = {};
     for (var d in overviewDetails) {
-      final p = d['Place'];
+      final p = d['place'];
       if (p != null && p['id'] != null) {
         final int placeId = p['id'] as int;
         if (!existingPlaceIds.contains(placeId) && !uniquePlacesMap.containsKey(placeId)) {
@@ -4617,7 +4620,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
           );
         }
         
-        final place = detail['Place'] ?? {};
+        final place = detail['place'] ?? {};
         final name = place['name'] ?? '';
         
         String? extraInfo;
@@ -4735,7 +4738,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
-                                  place['Category']?['name'] ?? 'Điểm tham quan',
+                                  place['category']?['name'] ?? 'Điểm tham quan',
                                   style: const TextStyle(
                                     fontSize: 10,
                                     color: Color(0xFF475569),
@@ -4777,8 +4780,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
         if (detail['placeId'] != null && place.isNotEmpty) {
           Map<String, dynamic>? nextPlaceRaw;
           for (int j = idx + 1; j < dayDetails.length; j++) {
-            if (dayDetails[j]['placeId'] != null && dayDetails[j]['Place'] != null) {
-              nextPlaceRaw = dayDetails[j]['Place'] as Map<String, dynamic>?;
+            if (dayDetails[j]['placeId'] != null && dayDetails[j]['place'] != null) {
+              nextPlaceRaw = dayDetails[j]['place'] as Map<String, dynamic>?;
               break;
             }
           }
@@ -4957,7 +4960,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                           if (!isCollapsed) ...[
                             Builder(
                               builder: (context) {
-                                final placesOnly = dayDetails.where((d) => d['placeId'] != null && d['Place'] != null).toList();
+                                final placesOnly = dayDetails.where((d) => d['placeId'] != null && d['place'] != null).toList();
                                 final placesCount = placesOnly.length;
                                 
                                 if (placesCount == 0) {
@@ -5024,8 +5027,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                     int totalDuration = 0;
                                     double totalDistance = 0;
                                     for (int i = 0; i < placesOnly.length - 1; i++) {
-                                      final p1 = Map<String, dynamic>.from(placesOnly[i]['Place'] as Map);
-                                      final p2 = Map<String, dynamic>.from(placesOnly[i + 1]['Place'] as Map);
+                                      final p1 = Map<String, dynamic>.from(placesOnly[i]['place'] as Map);
+                                      final p2 = Map<String, dynamic>.from(placesOnly[i + 1]['place'] as Map);
                                       final info = _getMockTravelInfo(p1, p2);
                                       totalDuration += info['duration'] as int;
                                       final dist = double.tryParse((info['distance'] as String).replaceAll(',', '.')) ?? 0.0;
@@ -5281,7 +5284,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     // Calculate sum of place costs if they have prices (mocked/parsed)
     int placeCosts = 0;
     for (var detail in _details) {
-      final p = detail['Place'] ?? {};
+      final p = detail['place'] ?? {};
       final priceStr = p['price']?.toString() ?? '';
       if (priceStr.contains('Miễn phí') || priceStr.isEmpty) {
         placeCosts += 0;
@@ -5456,12 +5459,12 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
             ),
             ..._details
                 .where((d) {
-                  final p = d['Place'] ?? {};
+                  final p = d['place'] ?? {};
                   final priceStr = p['price']?.toString() ?? '';
                   return !priceStr.contains('Miễn phí') && priceStr.isNotEmpty;
                 })
                 .map((d) {
-                  final p = d['Place'] ?? {};
+                  final p = d['place'] ?? {};
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.symmetric(

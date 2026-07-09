@@ -369,8 +369,8 @@ class _SectionStyleSheetState extends State<SectionStyleSheet> {
                       final place = item['data'] as Map<String, dynamic>;
                       
                       String placeName = 'Địa điểm';
-                      if (place['Place'] != null && place['Place']['name'] != null) {
-                        placeName = place['Place']['name'];
+                      if (place['place'] != null && place['place']['name'] != null) {
+                        placeName = place['place']['name'];
                       } else if (place['noteText'] != null) {
                         final String text = place['noteText'];
                         if (text.startsWith('[TODO] ')) {
