@@ -12,6 +12,7 @@ import '../widgets/section_style_sheet.dart';
 import '../widgets/itinerary_style_sheet.dart';
 import 'trip_ai_chat_screen.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import '../widgets/inline_place_details.dart';
 
 class TripOverviewScreen extends StatefulWidget {
   final Map<String, dynamic> itinerary;
@@ -68,6 +69,15 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
   ];
 
   // Expense Tab custom items
+  String _formatTimeStr(String t) {
+    if (t.contains('T')) {
+      try {
+        final dt = DateTime.parse(t).toLocal();
+        return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      } catch (_) {}
+    }
+    return t.length >= 5 ? t.substring(0, 5) : t;
+  }
   List<Map<String, dynamic>> _customExpenses = [];
 
   // Itinerary Tab custom items
@@ -1424,13 +1434,18 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                           final lon = (p['longitude'] as num).toDouble();
                           final sectionName = savedPlace['section'] as String?;
                           
+                          // Calculate index within its section to match list view numbering
+                          final sectionList = _savedPlaces.where((d) => d['section'] == sectionName).toList();
+                          sectionList.sort((a, b) => (a['sortOrder'] as int? ?? 0).compareTo(b['sortOrder'] as int? ?? 0));
+                          final indexInSection = sectionList.indexWhere((d) => d['id'] == savedPlace['id']) + 1;
+                          
                           final color = _sectionColors[sectionName] ?? AppTheme.primary;
-                          final icon = _sectionIcons[sectionName] ?? Icons.location_on;
+                          final icon = _sectionIcons[sectionName];
                           
                           return Marker(
                             point: LatLng(lat, lon),
-                            width: 40,
-                            height: 40,
+                            width: 32,
+                            height: 32,
                             child: Container(
                               decoration: BoxDecoration(
                                 color: color,
@@ -1444,7 +1459,17 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                   ),
                                 ],
                               ),
-                              child: Icon(icon, color: Colors.white, size: 20),
+                              alignment: Alignment.center,
+                              child: (icon == null || icon.codePoint == Icons.looks_one_rounded.codePoint)
+                                  ? Text(
+                                      '$indexInSection',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    )
+                                  : Icon(icon, color: Colors.white, size: 18),
                             ),
                           );
                         }).whereType<Marker>().toList(),
@@ -1629,12 +1654,17 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                               ),
                               const Spacer(),
                               if (!_isMapExpanded)
-                                Text(
-                                  'Chuyến đi đến $destination',
-                                  style: const TextStyle(
-                                    color: AppTheme.darkText,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
+                                Flexible(
+                                  flex: 3,
+                                  child: Text(
+                                    'Chuyến đi đến $destination',
+                                    style: const TextStyle(
+                                      color: AppTheme.darkText,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               const Spacer(),
@@ -2143,6 +2173,12 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                 fontSize: 13,
                               ),
                               border: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              errorBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
+                              filled: false,
+                              fillColor: Colors.transparent,
                               isDense: true,
                               contentPadding: EdgeInsets.zero,
                             ),
@@ -2368,12 +2404,18 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                     Expanded(
                       child: TextField(
                         decoration: const InputDecoration(
-                          hintText: 'Thêm một số mục',
+                          hintText: 'Thêm mục mới...',
                           hintStyle: TextStyle(
                             color: AppTheme.subtitleText,
                             fontSize: 13,
                           ),
                           border: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          filled: false,
+                          fillColor: Colors.transparent,
                           isDense: true,
                           contentPadding: EdgeInsets.symmetric(vertical: 4),
                         ),
@@ -3367,7 +3409,60 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     );
   }
 
+  Widget _buildPlaceTags(Map<String, dynamic> place) {
+    List<dynamic> subCategories = [];
+    final rawSub = place['subCategories'] ?? place['subcategories'] ?? place['sub_categories'];
+    
+    if (rawSub is List) {
+      subCategories = List.from(rawSub);
+    } else if (rawSub is String) {
+      try {
+        final decoded = jsonDecode(rawSub);
+        if (decoded is List) subCategories = List.from(decoded);
+      } catch (_) {}
+    }
+    
+    if (subCategories.isEmpty && place['category'] != null && place['category']['name'] != null) {
+      subCategories = [place['category']['name']];
+    }
+    
+    if (subCategories.isEmpty) {
+      subCategories = ['Điểm tham quan'];
+    }
+
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: subCategories.map((cat) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          cat.toString(),
+          style: const TextStyle(
+            fontSize: 10,
+            color: Color(0xFF475569),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      )).toList(),
+    );
+  }
+
   Widget _buildSavedPlaceCard(Map<String, dynamic> detail, int index) {
+    final bool isCollapsed = detail['isCollapsed'] == true || detail['iscollapsed'] == true;
+    final int id = detail['id'] as int;
+
+    if (detail['place'] == null && detail['noteText'] != null) {
+      final sectionDetails = _savedPlaces.where((d) => d['section'] == detail['section']).toList();
+      return Container(
+        key: ValueKey('note_$id'),
+        child: _buildSavedNoteCard(detail, index + 1, index, sectionDetails),
+      );
+    }
+
     final place = detail['place'] ?? {};
     final categoryName = place['category']?['name'] ?? 'Điểm tham quan';
     final String name = place['name'] ?? 'Địa điểm';
@@ -3377,22 +3472,52 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     if (name.toLowerCase().contains('ueno') ||
         name.toLowerCase().contains('sở thú ueno')) {
       extraInfo = 'Đóng cửa T2';
-    } else if (place['openTime'] != null && place['closeTime'] != null) {
-      final open = (place['openTime'] as String).substring(0, 5);
-      final close = (place['closeTime'] as String).substring(0, 5);
-      extraInfo = 'Mở cửa: $open - $close';
+    } else if (place['openingHours'] != null) {
+      dynamic hoursRaw = place['openingHours'];
+      if (hoursRaw is String) {
+        try { hoursRaw = jsonDecode(hoursRaw); } catch (_) {}
+      }
+      if (hoursRaw is Map) {
+        if (hoursRaw['weekday_text'] != null && hoursRaw['weekday_text'] is List && hoursRaw['weekday_text'].isNotEmpty) {
+          String hours = hoursRaw['weekday_text'].first.toString();
+          final parts = hours.split(RegExp(r':\s+'));
+          if (parts.length > 1) {
+            extraInfo = 'Mở cửa: ${parts.sublist(1).join(': ')}';
+          } else {
+            extraInfo = hours;
+          }
+        } else {
+          final weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+          final todayIdx = DateTime.now().weekday - 1;
+          final todayKey = weekdays[todayIdx];
+          List<dynamic>? times = hoursRaw[todayKey] as List<dynamic>?;
+          if (times == null || times.length < 2) {
+            times = hoursRaw['monday'] as List<dynamic>? ?? hoursRaw['sunday'] as List<dynamic>?;
+          }
+          if (times != null && times.length >= 2) {
+            extraInfo = 'Mở cửa: ${times[0]} - ${times[1]}';
+          } else {
+            extraInfo = 'Giờ mở cửa (Dữ liệu không chuẩn)';
+          }
+        }
+      } else {
+        extraInfo = hoursRaw.toString().replaceAll('\n', ' ');
+      }
     }
 
     return GestureDetector(
       onTap: () {
         if (_isSelectionMode && detail['id'] != null) {
           setState(() {
-            final id = detail['id'] as int;
             if (_selectedItemIds.contains(id)) {
               _selectedItemIds.remove(id);
             } else {
               _selectedItemIds.add(id);
             }
+          });
+        } else {
+          DatabaseService().updateNoteOrDetail(id, {'isCollapsed': !isCollapsed}, false).then((_) {
+            _loadData(silent: true);
           });
         }
       },
@@ -3424,21 +3549,26 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
               ),
             ],
           ),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppTheme.border),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(8),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(8),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: Row(
+                child: Column(
+                  children: [
+                    Row(
               children: [
             Expanded(
               child: Row(
@@ -3509,24 +3639,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                categoryName,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Color(0xFF475569),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
+                            Expanded(child: _buildPlaceTags(place)),
                           ],
                         ),
                       ],
@@ -3575,10 +3688,22 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
             ),
           ],
         ),
-      ),
+        if (!isCollapsed)
+          InlinePlaceWhiteCardExtension(
+            detail: detail,
+            isItineraryDetail: false,
+            onUpdate: () => _loadData(silent: true),
+          ),
+      ],
     ),
   ),
-);
+  if (!isCollapsed)
+    InlinePlaceBottomInfo(place: place),
+],
+  ),
+),
+      ),
+    );
   }
 
   // ================= TAB 1: TỔNG QUAN =================
@@ -3611,11 +3736,11 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                   .toList();
 
               return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: AppTheme.premiumCardDecoration(radius: 16),
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                decoration: AppTheme.premiumCardDecoration(radius: 0),
                 child: Material(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.zero,
                   clipBehavior: Clip.antiAlias,
                   child: ExpansionTile(
                     controller: _expansionControllers.putIfAbsent(
@@ -3969,7 +4094,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                 itemBuilder: (context, sIdx) {
                                   final detail = sectionDetails[sIdx];
                                   final key = ValueKey(detail['id']);
-                                  if (detail['noteText'] != null) {
+                                  if (detail['place'] == null && detail['noteText'] != null) {
                                     return Container(
                                       key: key,
                                       child: _buildSavedNoteCard(
@@ -4195,6 +4320,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                               width: 42,
                                               height: 42,
                                               fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) =>
+                                                  const Icon(Icons.image, size: 42),
                                             ),
                                           ),
                                           const SizedBox(width: 6),
@@ -4612,8 +4739,9 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
       children: List.generate(dayDetails.length, (idx) {
         final detail = dayDetails[idx];
         final id = detail['id'];
+        final bool isCollapsed = detail['isCollapsed'] == true || detail['iscollapsed'] == true;
 
-        if (detail['placeId'] == null && detail['noteText'] != null) {
+        if (detail['place'] == null && detail['noteText'] != null) {
           return Container(
             key: ValueKey('note_$id'),
             child: _buildSavedNoteCard(detail, idx + 1, idx, dayDetails),
@@ -4627,10 +4755,37 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
         if (name.toLowerCase().contains('ueno') ||
             name.toLowerCase().contains('sở thú ueno')) {
           extraInfo = 'Đóng cửa T2';
-        } else if (place['openTime'] != null && place['closeTime'] != null) {
-          final open = (place['openTime'] as String).substring(0, 5);
-          final close = (place['closeTime'] as String).substring(0, 5);
-          extraInfo = 'Mở cửa: $open - $close';
+        } else if (place['openingHours'] != null) {
+          dynamic hoursRaw = place['openingHours'];
+          if (hoursRaw is String) {
+            try { hoursRaw = jsonDecode(hoursRaw); } catch (_) {}
+          }
+          if (hoursRaw is Map) {
+            if (hoursRaw['weekday_text'] != null && hoursRaw['weekday_text'] is List && hoursRaw['weekday_text'].isNotEmpty) {
+              String hours = hoursRaw['weekday_text'].first.toString();
+              final parts = hours.split(RegExp(r':\s+'));
+              if (parts.length > 1) {
+                extraInfo = 'Mở cửa: ${parts.sublist(1).join(': ')}';
+              } else {
+                extraInfo = hours;
+              }
+            } else {
+              final weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+              final todayIdx = DateTime.now().weekday - 1;
+              final todayKey = weekdays[todayIdx];
+              List<dynamic>? times = hoursRaw[todayKey] as List<dynamic>?;
+              if (times == null || times.length < 2) {
+                times = hoursRaw['monday'] as List<dynamic>? ?? hoursRaw['sunday'] as List<dynamic>?;
+              }
+              if (times != null && times.length >= 2) {
+                extraInfo = 'Mở cửa: ${times[0]} - ${times[1]}';
+              } else {
+                extraInfo = 'Giờ mở cửa (Dữ liệu không chuẩn)';
+              }
+            }
+          } else {
+            extraInfo = hoursRaw.toString().replaceAll('\n', ' ');
+          }
         }
 
         final card = Container(
@@ -4657,21 +4812,32 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                 ),
               ],
             ),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppTheme.border),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(8),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
+            child: GestureDetector(
+              onTap: () {
+                DatabaseService().updateNoteOrDetail(id as int, {'isCollapsed': !isCollapsed}, true).then((_) {
+                  _loadData(silent: true);
+                });
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppTheme.border),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(8),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
                 children: [
                   Expanded(
                     child: Row(
@@ -4731,21 +4897,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF1F5F9),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  place['category']?['name'] ?? 'Điểm tham quan',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Color(0xFF475569),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
+                              Expanded(child: _buildPlaceTags(place)),
                             ],
                           ),
                         ],
@@ -4760,21 +4912,36 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      place['image'] ?? '',
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.image, size: 80),
-                    ),
+                    child: (place['image'] != null && place['image'].toString().isNotEmpty)
+                        ? Image.network(
+                            place['image'],
+                            width: 80,
+                            height: 80,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.image, size: 80),
+                          )
+                        : const Icon(Icons.image, size: 80, color: Colors.grey),
                   ),
                 ],
               ),
-            ],
+                        ],
+                      ),
+                      if (!isCollapsed)
+                        InlinePlaceWhiteCardExtension(
+                          detail: detail,
+                          isItineraryDetail: true,
+                          onUpdate: () => _loadData(silent: true),
+                        ),
+                    ],
+                  ),
+                ),
+                if (!isCollapsed)
+                  InlinePlaceBottomInfo(place: place),
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
 
         Widget? travelSeparator;
         if (detail['placeId'] != null && place.isNotEmpty) {
