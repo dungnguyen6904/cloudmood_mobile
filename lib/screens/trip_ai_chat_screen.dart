@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_map/flutter_map.dart';
@@ -36,20 +35,16 @@ class _TripAIChatScreenState extends State<TripAIChatScreen> {
   }
 
   Future<void> _fetchMapData() async {
-    final apiKey = dotenv.env['GEOAPIFY_API_KEY'];
-    if (apiKey == null) return;
-    
     // Geocode the destination
     final url = Uri.parse(
-        'https://api.geoapify.com/v1/geocode/search?text=${Uri.encodeComponent(widget.destination)}&limit=1&apiKey=$apiKey');
+        'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(widget.destination)}&format=json&limit=1');
     try {
-      final response = await http.get(url);
+      final response = await http.get(url, headers: {'User-Agent': 'CloudMoodApp/1.0'});
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['features'] != null && data['features'].isNotEmpty) {
-          final props = data['features'][0]['properties'];
-          final double lat = (props['lat'] as num).toDouble();
-          final double lon = (props['lon'] as num).toDouble();
+        if (data != null && data.isNotEmpty) {
+          final double lat = double.parse(data[0]['lat'].toString());
+          final double lon = double.parse(data[0]['lon'].toString());
           if (mounted) {
             setState(() {
               _mapCenter = LatLng(lat, lon);
@@ -377,10 +372,7 @@ class _TripAIChatScreenState extends State<TripAIChatScreen> {
                     ),
                     children: [
                       TileLayer(
-                        urlTemplate: 'https://maps.geoapify.com/v1/tile/osm-bright-smooth/{z}/{x}/{y}.png?apiKey={api_key}',
-                        additionalOptions: {
-                          'api_key': dotenv.env['GEOAPIFY_API_KEY'] ?? '',
-                        },
+                        urlTemplate: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t%3A2%7Cp.v%3Aoff',
                       ),
                     ],
                   )

@@ -194,7 +194,7 @@ class _InlinePlaceWhiteCardExtensionState extends State<InlinePlaceWhiteCardExte
   }
 
   Future<void> _pickFile() async {
-    FilePickerResult? result = await FilePicker.pickFiles();
+    FilePickerResult? result = await FilePicker.platform.pickFiles();
     if (result != null && result.files.isNotEmpty) {
       setState(() {
         attachments.add(result.files.single.name);

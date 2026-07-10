@@ -2,8 +2,14 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:flutter/foundation.dart';
+
 class ApiClient {
-  static const String baseUrl = 'http://localhost:3000'; // Default, might need to change for physical device
+  static String get baseUrl {
+    if (kIsWeb) return 'http://localhost:3000';
+    if (defaultTargetPlatform == TargetPlatform.android) return 'http://10.0.2.2:3000';
+    return 'http://localhost:3000';
+  }
 
   static Future<Map<String, String>> _getHeaders() async {
     final prefs = await SharedPreferences.getInstance();

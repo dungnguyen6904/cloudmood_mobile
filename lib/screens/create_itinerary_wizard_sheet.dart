@@ -207,15 +207,14 @@ class _CreateItineraryWizardSheetState
       _isLoadingSearch = true;
     });
     try {
-      final apiKey = 'b69101894fbf4379be03c1bb8474be6f';
       final url = Uri.parse(
-        'https://api.geoapify.com/v1/geocode/autocomplete?text=${Uri.encodeComponent(query)}&type=city&limit=5&apiKey=$apiKey',
+        'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(query)}&format=json&addressdetails=1&limit=5',
       );
-      final response = await http.get(url);
+      final response = await http.get(url, headers: {'User-Agent': 'CloudMoodApp/1.0'});
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         setState(() {
-          _searchResults = data['features'] ?? [];
+          _searchResults = data is List ? data : [];
         });
       }
     } catch (e) {
@@ -1134,13 +1133,15 @@ class _CreateItineraryWizardSheetState
                     const Divider(height: 1, color: AppTheme.border),
                 itemBuilder: (context, index) {
                   final feature = _searchResults[index];
-                  final props = feature['properties'] ?? {};
+                  final address = feature['address'] ?? {};
                   final String name =
-                      props['city'] ??
-                      props['name'] ??
-                      props['formatted'] ??
+                      address['city'] ??
+                      address['town'] ??
+                      address['state'] ??
+                      feature['name'] ??
+                      feature['display_name']?.split(',').first ??
                       '';
-                  final String formatted = props['formatted'] ?? '';
+                  final String formatted = feature['display_name'] ?? '';
                   return Material(
                     color: Colors.transparent,
                     child: ListTile(

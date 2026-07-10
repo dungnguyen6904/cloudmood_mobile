@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -16,6 +15,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import '../widgets/inline_place_details.dart';
 import '../widgets/save_to_trip_bottom_sheet.dart';
+import 'package:geolocator/geolocator.dart';
 
 class TripOverviewScreen extends StatefulWidget {
   final Map<String, dynamic> itinerary;
@@ -367,20 +367,17 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
   }
 
   Future<void> _fetchMapData() async {
-    final apiKey = dotenv.env['GEOAPIFY_API_KEY'];
-    if (apiKey == null) return;
     final String dest = _itineraryData['destination'] ?? '';
     final url = Uri.parse(
-      'https://api.geoapify.com/v1/geocode/search?text=${Uri.encodeComponent(dest)}&limit=1&apiKey=$apiKey',
+      'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(dest)}&format=json&limit=1',
     );
     try {
-      final response = await http.get(url);
+      final response = await http.get(url, headers: {'User-Agent': 'CloudMoodApp/1.0'});
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['features'] != null && data['features'].isNotEmpty) {
-          final props = data['features'][0]['properties'];
-          final double lat = (props['lat'] as num).toDouble();
-          final double lon = (props['lon'] as num).toDouble();
+        if (data != null && data.isNotEmpty) {
+          final double lat = double.parse(data[0]['lat'].toString());
+          final double lon = double.parse(data[0]['lon'].toString());
           if (mounted) {
             setState(() {
               _mapCenter = LatLng(lat, lon);
@@ -1395,6 +1392,406 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     });
   }
 
+  void _showShareDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              child: Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+            const Text(
+              'Mời bạn đồng hành',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppTheme.primary),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text('Có thể chỉnh sửa', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text('Chỉ xem', style: TextStyle(color: AppTheme.subtitleText)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'Mời qua email',
+                prefixIcon: const Icon(Icons.person_add_alt_1_rounded),
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildShareIconOption(Icons.link_rounded, 'Sao chép\nliên kết'),
+                _buildShareIconOption(Icons.message_rounded, 'Tin nhắn'),
+                _buildShareIconOption(Icons.ios_share_rounded, 'Khác'),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const Divider(),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.manage_accounts_rounded),
+              title: const Text('Quản lý bạn đồng hành', style: TextStyle(fontWeight: FontWeight.bold)),
+              onTap: () {},
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShareIconOption(IconData icon, String label) {
+    return Column(
+      children: [
+        CircleAvatar(
+          radius: 28,
+          backgroundColor: Colors.grey.shade100,
+          child: Icon(icon, color: AppTheme.darkText, size: 28),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 12, color: AppTheme.subtitleText),
+        ),
+      ],
+    );
+  }
+
+  void _showMapSettingsSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Text(
+                  'Cài đặt chuyến đi',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                _buildSettingTile(Icons.reply_rounded, 'Chia sẻ'),
+                _buildSettingTile(Icons.edit_rounded, 'Chỉnh sửa tiêu đề'),
+                _buildSettingTile(Icons.lock_rounded, 'Cài đặt quyền riêng tư'),
+                _buildSettingTile(Icons.attach_money_rounded, 'Cài đặt chi phí'),
+                _buildSettingTile(Icons.directions_car_rounded, 'Chế độ vận chuyển mặc định'),
+                _buildSettingTile(Icons.lightbulb_outline_rounded, 'Mẹo du lịch chuyên gia'),
+                _buildSettingTile(Icons.info_outline_rounded, 'Trợ giúp & cách thực hiện'),
+                _buildSettingTile(Icons.help_outline_rounded, 'Phản hồi & hỗ trợ'),
+                _buildSettingTile(Icons.format_list_bulleted_rounded, 'Hiển thị tiến trình các nhiệm vụ quan trọng'),
+                _buildSettingTile(Icons.delete_outline_rounded, 'Xóa chuyến đi này'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingTile(IconData icon, String title) {
+    return ListTile(
+      leading: Icon(icon, color: AppTheme.darkText),
+      title: Text(title, style: const TextStyle(color: AppTheme.darkText)),
+      onTap: () {
+        Navigator.pop(context);
+      },
+    );
+  }
+
+  void _showSearchOverlay() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SizedBox(
+        height: MediaQuery.of(context).size.height * 0.9,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Tìm kiếm theo tên hoặc địa chỉ',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        filled: true,
+                        fillColor: Colors.grey.shade100,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Tìm kiếm thường xuyên',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              _buildSearchCategory(Icons.restaurant_rounded, 'Ẩm thực'),
+              _buildSearchCategory(Icons.place_rounded, 'Điểm tham quan'),
+              _buildSearchCategory(Icons.local_gas_station_rounded, 'Trạm xăng'),
+              _buildSearchCategory(Icons.ev_station_rounded, 'Trạm sạc xe điện'),
+              _buildSearchCategory(Icons.hotel_rounded, 'Điểm dừng nghỉ'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchCategory(IconData icon, String title) {
+    return ListTile(
+      leading: Icon(icon, color: AppTheme.darkText),
+      title: Text(title, style: const TextStyle(color: AppTheme.darkText)),
+      contentPadding: EdgeInsets.zero,
+      onTap: () {
+        Navigator.pop(context);
+      },
+    );
+  }
+
+  void _showLayersSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Khám phá khu vực',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    TextButton(
+                      onPressed: () {},
+                      child: const Text('Xem tất cả', style: TextStyle(color: AppTheme.primary)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildExploreIcon(Icons.restaurant_rounded, 'Nhà hàng'),
+                    _buildExploreIcon(Icons.place_rounded, 'Điểm tham\nquan'),
+                    _buildExploreIcon(Icons.local_cafe_rounded, 'Quán cà phê'),
+                    _buildExploreIcon(Icons.icecream_rounded, 'Món tráng\nmiệng'),
+                    _buildExploreIcon(Icons.wine_bar_rounded, 'Thanh'),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                const Divider(),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Địa điểm đã lưu của bạn',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    Checkbox(
+                      value: true,
+                      onChanged: (v) {},
+                      activeColor: AppTheme.primary,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text('Tổng quan', style: TextStyle(color: AppTheme.subtitleText)),
+                _buildSavedPlaceLayer('section 1', Colors.blue),
+                _buildSavedPlaceLayer('section 2', Colors.red),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExploreIcon(IconData icon, String label) {
+    return Column(
+      children: [
+        CircleAvatar(
+          radius: 24,
+          backgroundColor: Colors.grey.shade100,
+          child: Icon(icon, color: AppTheme.subtitleText),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 12, color: AppTheme.subtitleText),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSavedPlaceLayer(String title, Color color) {
+    return Row(
+      children: [
+        Icon(Icons.location_on, color: color),
+        const SizedBox(width: 8),
+        Expanded(child: Text(title)),
+        Checkbox(
+          value: true,
+          onChanged: (v) {},
+          activeColor: AppTheme.primary,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _goToMyLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Dịch vụ định vị đã bị tắt.')),
+        );
+      }
+      return;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Quyền truy cập vị trí bị từ chối.')),
+          );
+        }
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Quyền bị từ chối vĩnh viễn, hãy bật trong cài đặt.')),
+        );
+      }
+      return;
+    }
+
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      if (mounted) {
+        _mapController.move(LatLng(position.latitude, position.longitude), 15.0);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi khi lấy vị trí: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final destination = _itineraryData['destination'] ?? 'Điểm đến';
@@ -1457,10 +1854,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                     ),
                     children: [
                       TileLayer(
-                        urlTemplate: 'https://maps.geoapify.com/v1/tile/osm-bright-smooth/{z}/{x}/{y}.png?apiKey={api_key}',
-                        additionalOptions: {
-                          'api_key': dotenv.env['GEOAPIFY_API_KEY'] ?? '',
-                        },
+                        urlTemplate: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t%3A2%7Cp.v%3Aoff',
                       ),
                       MarkerLayer(
                         markers: (() {
@@ -1557,55 +1951,117 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
-            top: topPadding + 80,
-            right: !_isMapExpanded ? -60 : 16,
+            top: topPadding + 60,
+            right: !_isMapExpanded ? -100 : 16,
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                // Share & More Pill
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 20,
+                        backgroundColor: Colors.transparent,
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.reply_rounded, // Similar to reply/share in image 1
+                            color: AppTheme.darkText,
+                            size: 20,
+                          ),
+                          onPressed: _showShareDialog,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      CircleAvatar(
+                        radius: 20,
+                        backgroundColor: Colors.transparent,
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.more_horiz_rounded,
+                            color: AppTheme.darkText,
+                            size: 20,
+                          ),
+                          onPressed: _showMapSettingsSheet,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Search Button
                 CircleAvatar(
+                  radius: 24,
                   backgroundColor: Colors.white,
                   child: IconButton(
                     icon: const Icon(
-                      Icons.share_rounded,
+                      Icons.search_rounded,
                       color: AppTheme.darkText,
-                      size: 20,
+                      size: 22,
                     ),
-                    onPressed: () {},
+                    onPressed: _showSearchOverlay,
                   ),
                 ),
                 const SizedBox(height: 12),
+                
+                // Layers Button
                 CircleAvatar(
+                  radius: 24,
                   backgroundColor: Colors.white,
                   child: IconButton(
                     icon: const Icon(
-                      Icons.more_horiz_rounded,
+                      Icons.layers_rounded,
                       color: AppTheme.darkText,
-                      size: 20,
+                      size: 22,
                     ),
-                    onPressed: () {},
+                    onPressed: _showLayersSheet,
                   ),
                 ),
                 const SizedBox(height: 12),
+
+                // Hotel Button (Placeholder)
                 CircleAvatar(
+                  radius: 24,
                   backgroundColor: Colors.white,
                   child: IconButton(
                     icon: const Icon(
-                      Icons.search,
+                      Icons.bed_rounded,
                       color: AppTheme.darkText,
-                      size: 20,
+                      size: 22,
                     ),
-                    onPressed: () {},
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Tính năng Khách sạn sẽ sớm ra mắt!')),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: 12),
+
+                // Location Button
                 CircleAvatar(
+                  radius: 24,
                   backgroundColor: Colors.white,
                   child: IconButton(
                     icon: const Icon(
-                      Icons.layers_outlined,
+                      Icons.near_me_rounded, // Location arrow
                       color: AppTheme.darkText,
-                      size: 20,
+                      size: 22,
                     ),
-                    onPressed: () {},
+                    onPressed: _goToMyLocation,
                   ),
                 ),
               ],
@@ -1693,7 +2149,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                               AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
                                 curve: Curves.easeOutCubic,
-                                margin: const EdgeInsets.only(left: 16),
+                                margin: EdgeInsets.only(
+                                    left: 16, top: _isMapExpanded ? 8 : 0),
                                 decoration: BoxDecoration(
                                   color: !_isMapExpanded
                                       ? Colors.transparent
@@ -1711,6 +2168,9 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                         ],
                                 ),
                                 child: IconButton(
+                                  iconSize: _isMapExpanded ? 20 : 24,
+                                  padding: _isMapExpanded ? const EdgeInsets.all(8) : const EdgeInsets.all(8),
+                                  constraints: _isMapExpanded ? const BoxConstraints(minWidth: 36, minHeight: 36) : const BoxConstraints(minWidth: 40, minHeight: 40),
                                   icon: const Icon(
                                     Icons.arrow_back_ios_new_rounded,
                                     color: AppTheme.darkText,
@@ -4206,8 +4666,9 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                         const Icon(Icons.image, size: 80),
                   ),
                 ),
-                _isSelectionMode
+                (_isSelectionMode || !isCollapsed)
                     ? IgnorePointer(
+                        ignoring: _isSelectionMode,
                         child: Container(
                           margin: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
@@ -4218,7 +4679,16 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                           height: 24,
                           child: Checkbox(
                             value: _selectedItemIds.contains(detail['id']),
-                            onChanged: (_) {},
+                            onChanged: _isSelectionMode ? (_) {} : (val) {
+                              setState(() {
+                                _isSelectionMode = true;
+                                if (val == true) {
+                                  _selectedItemIds.add(detail['id'] as int);
+                                } else {
+                                  _selectedItemIds.remove(detail['id'] as int);
+                                }
+                              });
+                            },
                             activeColor: AppTheme.primary,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(4),
@@ -4248,6 +4718,31 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                 false,
               );
             },
+          ),
+        if (!isCollapsed)
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: AppTheme.subtitleText),
+                  onPressed: () => _removePlaceDetail(detail['id'], name, isSavedPlace: true),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.drag_indicator, color: AppTheme.subtitleText),
+                  onPressed: () => _showSectionStyleSheet(context, detail['section'], initialTabIndex: 1),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.keyboard_arrow_up, color: AppTheme.subtitleText),
+                  onPressed: () {
+                    setState(() {
+                      _expandedPlaceIds.remove(id);
+                    });
+                  },
+                ),
+              ],
+            ),
           ),
       ],
     ),
@@ -5513,6 +6008,37 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                           )
                         : const Icon(Icons.image, size: 80, color: Colors.grey),
                   ),
+                  (_isSelectionMode || !isCollapsed)
+                      ? IgnorePointer(
+                          ignoring: _isSelectionMode,
+                          child: Container(
+                            margin: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            width: 24,
+                            height: 24,
+                            child: Checkbox(
+                              value: _selectedItemIds.contains(detail['id']),
+                              onChanged: _isSelectionMode ? (_) {} : (val) {
+                                setState(() {
+                                  _isSelectionMode = true;
+                                  if (val == true) {
+                                    _selectedItemIds.add(detail['id'] as int);
+                                  } else {
+                                    _selectedItemIds.remove(detail['id'] as int);
+                                  }
+                                });
+                              },
+                              activeColor: AppTheme.primary,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
                 ],
               ),
                         ],
@@ -5552,6 +6078,31 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                         _mapController.move(LatLng(lat - 0.005, lon), 15.0);
                       }
                     },
+                  ),
+                if (!isCollapsed)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: AppTheme.subtitleText),
+                          onPressed: () => _removePlaceDetail(detail['id'], name, isSavedPlace: false),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.drag_indicator, color: AppTheme.subtitleText),
+                          onPressed: () => _showItineraryStyleSheet(context, initialTabIndex: 1, initialDayIndex: (detail['day'] as int? ?? 1) - 1),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.keyboard_arrow_up, color: AppTheme.subtitleText),
+                          onPressed: () {
+                            setState(() {
+                              _expandedPlaceIds.remove(id);
+                            });
+                          },
+                        ),
+                      ],
+                    ),
                   ),
               ],
             ),
