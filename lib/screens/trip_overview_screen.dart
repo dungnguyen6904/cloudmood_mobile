@@ -12,7 +12,10 @@ import '../widgets/section_style_sheet.dart';
 import '../widgets/itinerary_style_sheet.dart';
 import 'trip_ai_chat_screen.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 import '../widgets/inline_place_details.dart';
+import '../widgets/save_to_trip_bottom_sheet.dart';
 
 class TripOverviewScreen extends StatefulWidget {
   final Map<String, dynamic> itinerary;
@@ -49,6 +52,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
   bool _isSelectionMode = false;
   Set<int> _selectedItemIds = {};
   Set<String> _selectedSections = {};
+  int? _focusedPlaceId;
+  bool _isSheetHalf = false;
   final List<Color> _availableColors = [
     Colors.green,
     Colors.tealAccent,
@@ -93,12 +98,15 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
   LatLng? _mapCenter;
   bool _isDragging = false;
   double? _dragHeight;
+  final MapController _mapController = MapController();
+  Map<String, dynamic>? _selectedMapPlace;
 
   // AI Dialog state
   bool _isGeneratingAI = false;
   OverlayEntry? _currentNotification;
   int? _editingNoteId;
   String? _focusedTodoItemKey;
+  Set<int> _expandedPlaceIds = {};
 
   @override
   void initState() {
@@ -1358,9 +1366,32 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     );
   }
 
+  void _focusPlaceOnMap(int? id) {
+    if (id == null) return;
+    
+    // Find the place in the trip lists
+    final detail = _savedPlaces.firstWhere(
+      (p) => p['id'] == id,
+      orElse: () => <String, dynamic>{},
+    );
+    if (detail.isEmpty) return;
+
+    final place = detail['place'] as Map<String, dynamic>?;
+    if (place != null && place['latitude'] != null && place['longitude'] != null) {
+      final lat = (place['latitude'] as num).toDouble();
+      final lon = (place['longitude'] as num).toDouble();
+      // Offset latitude by -0.005 so marker is in the upper visible half
+      _mapController.move(LatLng(lat - 0.005, lon), 15.0);
+    }
+  }
+
   void _showMapOverview() {
     setState(() {
       _isMapExpanded = true;
+      _isSheetHalf = true;
+    });
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _focusPlaceOnMap(_focusedPlaceId);
     });
   }
 
@@ -1401,9 +1432,10 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
     final headerHeight =
         topPadding + 56.0 + 48.0; // 56 for AppBar + 48 for TabBar
     final screenHeight = MediaQuery.of(context).size.height;
+    final double halfHeight = (screenHeight - headerHeight) * 0.55;
     final double targetSheetHeight = !_isMapExpanded
         ? (screenHeight - headerHeight)
-        : 75.0;
+        : (_selectedMapPlace != null ? 0.0 : (_isSheetHalf ? halfHeight : 75.0));
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -1413,9 +1445,15 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
           Positioned.fill(
             child: _mapCenter != null
                 ? FlutterMap(
+                    mapController: _mapController,
                     options: MapOptions(
                       initialCenter: _mapCenter!,
                       initialZoom: 13.0,
+                      onTap: (tapPosition, point) {
+                        setState(() {
+                          _selectedMapPlace = null;
+                        });
+                      },
                     ),
                     children: [
                       TileLayer(
@@ -1425,36 +1463,68 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                         },
                       ),
                       MarkerLayer(
-                        markers: _savedPlaces.map((savedPlace) {
-                          final p = savedPlace['place'] as Map<String, dynamic>?;
-                          if (p == null || p['latitude'] == null || p['longitude'] == null) {
-                            return null;
-                          }
-                          final lat = (p['latitude'] as num).toDouble();
-                          final lon = (p['longitude'] as num).toDouble();
-                          final sectionName = savedPlace['section'] as String?;
-                          
-                          // Calculate index within its section to match list view numbering
-                          final sectionList = _savedPlaces.where((d) => d['section'] == sectionName).toList();
-                          sectionList.sort((a, b) => (a['sortOrder'] as int? ?? 0).compareTo(b['sortOrder'] as int? ?? 0));
-                          final indexInSection = sectionList.indexWhere((d) => d['id'] == savedPlace['id']) + 1;
-                          
-                          final color = _sectionColors[sectionName] ?? AppTheme.primary;
-                          final icon = _sectionIcons[sectionName];
-                          
+                        markers: (() {
+                          final isOverview = _tabController.index == 0;
+                          final currentPlaces = isOverview ? _savedPlaces : _details.where((d) => d['place'] != null).toList();
+                          final sortedPlaces = List<Map<String, dynamic>>.from(currentPlaces);
+                          sortedPlaces.sort((a, b) {
+                            final isAFocused = a['id'] == _focusedPlaceId || (_selectedMapPlace != null && _selectedMapPlace!['id'] == a['id']);
+                            final isBFocused = b['id'] == _focusedPlaceId || (_selectedMapPlace != null && _selectedMapPlace!['id'] == b['id']);
+                            if (isAFocused && !isBFocused) return 1;
+                            if (!isAFocused && isBFocused) return -1;
+                            return 0;
+                          });
+                          return sortedPlaces.map((savedPlace) {
+                            final p = savedPlace['place'] as Map<String, dynamic>?;
+                            if (p == null || p['latitude'] == null || p['longitude'] == null) {
+                              return null;
+                            }
+                            final lat = (p['latitude'] as num).toDouble();
+                            final lon = (p['longitude'] as num).toDouble();
+                            
+                            int indexInSection;
+                            Color color;
+                            IconData? icon;
+                            
+                            if (isOverview) {
+                              final sectionName = savedPlace['section'] as String?;
+                              final sectionList = currentPlaces.where((d) => d['section'] == sectionName).toList();
+                              sectionList.sort((a, b) => (a['sortOrder'] as int? ?? 0).compareTo(b['sortOrder'] as int? ?? 0));
+                              indexInSection = sectionList.indexWhere((d) => d['id'] == savedPlace['id']) + 1;
+                              color = _sectionColors[sectionName] ?? AppTheme.primary;
+                              icon = _sectionIcons[sectionName];
+                            } else {
+                              final day = savedPlace['day'] as int? ?? 1;
+                              final dayList = currentPlaces.where((d) => d['day'] == day).toList();
+                              dayList.sort((a, b) => (a['sortOrder'] as int? ?? 0).compareTo(b['sortOrder'] as int? ?? 0));
+                              indexInSection = dayList.indexWhere((d) => d['id'] == savedPlace['id']) + 1;
+                              color = _dayColors[day - 1] ?? AppTheme.primary;
+                              icon = null;
+                            }
+                            
+                            final bool isSheetMinimized = _isMapExpanded && !_isSheetHalf && _selectedMapPlace == null;
+                            final isFocused = !isSheetMinimized && ((savedPlace['id'] == _focusedPlaceId) || (_selectedMapPlace != null && _selectedMapPlace!['id'] == savedPlace['id']));
+                          final double markerSize = isFocused ? 56.0 : 32.0;
+
                           return Marker(
                             point: LatLng(lat, lon),
-                            width: 32,
-                            height: 32,
-                            child: Container(
+                            width: markerSize,
+                            height: markerSize,
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedMapPlace = savedPlace;
+                                });
+                              },
+                              child: Container(
                               decoration: BoxDecoration(
                                 color: color,
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
+                                border: Border.all(color: Colors.white, width: isFocused ? 3 : 2),
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withOpacity(0.2),
-                                    blurRadius: 4,
+                                    blurRadius: isFocused ? 8 : 4,
                                     offset: const Offset(0, 2),
                                   ),
                                 ],
@@ -1463,16 +1533,18 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                               child: (icon == null || icon.codePoint == Icons.looks_one_rounded.codePoint)
                                   ? Text(
                                       '$indexInSection',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 14,
+                                        fontSize: isFocused ? 18 : 14,
                                       ),
                                     )
-                                  : Icon(icon, color: Colors.white, size: 18),
+                                  : Icon(icon, color: Colors.white, size: isFocused ? 24 : 18),
                             ),
+                          ),
                           );
-                        }).whereType<Marker>().toList(),
+                        }).whereType<Marker>().toList();
+                        })(),
                       ),
                     ],
                   )
@@ -1725,8 +1797,18 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                 borderRadius: !_isMapExpanded
                     ? BorderRadius.zero
                     : const BorderRadius.vertical(top: Radius.circular(24)),
-                child: Column(
-                  children: [
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final availableHeight = constraints.maxHeight;
+                    final handleHeight = _isMapExpanded ? 20.0 : 16.0;
+                    final tabBarHeight = _isMapExpanded ? 48.0 : 0.0;
+                    final contentHeight = math.max(0.0, availableHeight - handleHeight - tabBarHeight);
+                    
+                    return SingleChildScrollView(
+                      physics: const NeverScrollableScrollPhysics(),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                     // Drag handle
                     GestureDetector(
                       onVerticalDragStart: (details) {
@@ -1742,27 +1824,61 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                               details.primaryDelta!;
                           // Clamp the height
                           final max = screenHeight - headerHeight;
-                          final min = 75.0; // Allow dragging down to bottom
+                          final min = _selectedMapPlace != null ? 0.0 : 75.0; // Allow dragging down to bottom
                           if (_dragHeight! > max) _dragHeight = max;
                           if (_dragHeight! < min) _dragHeight = min;
                         });
                       },
                       onVerticalDragEnd: (details) {
                         final max = screenHeight - headerHeight;
-                        final min = 75.0;
-                        final mid = (max + min) / 2;
+                        final min = _selectedMapPlace != null ? 0.0 : 75.0;
+                        final half = (screenHeight - headerHeight) * 0.55;
+                        final wasExpanded = _isMapExpanded;
 
                         setState(() {
                           _isDragging = false;
                           if (details.primaryVelocity != null &&
                               details.primaryVelocity!.abs() > 300) {
-                            _isMapExpanded = details.primaryVelocity! > 0;
+                            if (details.primaryVelocity! > 0) { // Swiped down
+                              if (!_isMapExpanded) {
+                                _isMapExpanded = true;
+                                _isSheetHalf = true;
+                              } else if (_isSheetHalf) {
+                                _isSheetHalf = false;
+                              }
+                            } else { // Swiped up
+                              if (_isMapExpanded && !_isSheetHalf) {
+                                _isSheetHalf = true;
+                              } else if (_isMapExpanded && _isSheetHalf) {
+                                _isMapExpanded = false;
+                                _isSheetHalf = false;
+                              }
+                            }
                           } else {
-                            _isMapExpanded =
-                                (_dragHeight ?? targetSheetHeight) < mid;
+                            final h = _dragHeight ?? targetSheetHeight;
+                            final distToFull = (h - max).abs();
+                            final distToHalf = (h - half).abs();
+                            final distToMin = (h - min).abs();
+                            
+                            if (distToFull <= distToHalf && distToFull <= distToMin) {
+                              _isMapExpanded = false;
+                              _isSheetHalf = false;
+                            } else if (distToHalf <= distToFull && distToHalf <= distToMin) {
+                              _isMapExpanded = true;
+                              _isSheetHalf = true;
+                            } else {
+                              _isMapExpanded = true;
+                              _isSheetHalf = false;
+                            }
                           }
                           _dragHeight = null;
                         });
+                        
+                        if (!wasExpanded && _isMapExpanded) {
+                          Future.delayed(const Duration(milliseconds: 100), () {
+                            _focusPlaceOnMap(_focusedPlaceId);
+                          });
+                        }
                       },
                       child: Container(
                         color: Colors.transparent,
@@ -1811,7 +1927,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                       ),
 
                     // The Tab Views
-                    Expanded(
+                    SizedBox(
+                      height: contentHeight,
                       child: Stack(
                         children: [
                           _isLoading
@@ -1836,6 +1953,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                     );
                                   },
                                 ),
+
+
 
                           // FABs
                           if (!_isMapExpanded)
@@ -1929,9 +2048,45 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                     ),
                   ],
                 ),
-              ),
+              );
+            },
+          ),
             ),
           ),
+          ),
+          
+          // Zoom Button (Moved outside so it doesn't get clipped by AnimatedContainer)
+          if (_isMapExpanded && _selectedMapPlace == null && !_isSheetHalf)
+            Positioned(
+              left: 16,
+              bottom: 75.0 + 16.0,
+              child: GestureDetector(
+                onTap: _showZoomOptionsBottomSheet,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4)),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.search, size: 20, color: Colors.black87),
+                      SizedBox(width: 8),
+                      Text(
+                        'Phóng to vào...',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          if (_isMapExpanded && _selectedMapPlace != null) _buildMapPlaceBottomSheet(),
         ],
       ),
     );
@@ -2051,6 +2206,381 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
           },
         );
       },
+    );
+  }
+
+  void _fitMapToBounds(List<Map<String, dynamic>> details) {
+    if (details.isEmpty) return;
+
+    double minLat = 90.0;
+    double maxLat = -90.0;
+    double minLon = 180.0;
+    double maxLon = -180.0;
+    bool hasValidPoints = false;
+
+    for (var d in details) {
+      final p = d['place'];
+      if (p != null && p['latitude'] != null && p['longitude'] != null) {
+        final lat = (p['latitude'] as num).toDouble();
+        final lon = (p['longitude'] as num).toDouble();
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+        if (lon < minLon) minLon = lon;
+        if (lon > maxLon) maxLon = lon;
+        hasValidPoints = true;
+      }
+    }
+
+    if (!hasValidPoints) return;
+    
+    // Add some padding to bounds
+    final latPadding = (maxLat - minLat) * 0.1;
+    final lonPadding = (maxLon - minLon) * 0.1;
+    
+    // If it's a single point, bounds will be zero, so we pad it.
+    if (maxLat == minLat && maxLon == minLon) {
+      _mapController.move(LatLng(minLat, minLon), 15.0);
+      return;
+    }
+
+    final bounds = LatLngBounds(
+      LatLng(minLat - latPadding, minLon - lonPadding),
+      LatLng(maxLat + latPadding, maxLon + lonPadding),
+    );
+
+    _mapController.fitCamera(CameraFit.bounds(
+      bounds: bounds,
+      padding: const EdgeInsets.all(50),
+    ));
+  }
+
+  void _showZoomOptionsBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 4),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Phóng to vào',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: const Text(
+                      'Hoàn thành',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // All points
+                  ListTile(
+                    leading: const Icon(Icons.search, color: Colors.black87),
+                    title: const Text('Hiển thị tất cả điểm trên bản đồ'),
+                    onTap: () {
+                      _fitMapToBounds(_savedPlaces);
+                      Navigator.pop(context);
+                    },
+                  ),
+                  const Divider(),
+                  
+                  // Sections
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('Tổng quan', style: TextStyle(color: Colors.grey)),
+                  ),
+                  ..._sectionNames.map((section) {
+                    final color = _sectionColors[section] ?? AppTheme.primary;
+                    return ListTile(
+                      leading: Icon(Icons.location_on, color: color),
+                      title: Text(section),
+                      onTap: () {
+                        final sectionPlaces = _savedPlaces.where((d) => d['section'] == section).toList();
+                        _fitMapToBounds(sectionPlaces);
+                        Navigator.pop(context);
+                      },
+                    );
+                  }).toList(),
+
+                  const Divider(),
+                  
+                  // Days
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('Hành trình', style: TextStyle(color: Colors.grey)),
+                  ),
+                  ...List.generate((_itineraryData['days'] as num?)?.toInt() ?? 1, (i) {
+                    final dayNum = i + 1;
+                    return ListTile(
+                      leading: const Icon(Icons.location_on, color: AppTheme.amber),
+                      title: Text('Ngày $dayNum'),
+                      onTap: () {
+                        final dayPlaces = _details.where((d) => d['day'] == dayNum).toList();
+                        _fitMapToBounds(dayPlaces);
+                        Navigator.pop(context);
+                      },
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMapPlaceBottomSheet() {
+    if (_selectedMapPlace == null) return const SizedBox();
+    
+    final p = _selectedMapPlace!['place'] as Map<String, dynamic>? ?? _selectedMapPlace!;
+    final name = p['name'] ?? 'Địa điểm';
+    final description = p['description'] ?? p['editorialSummary'] ?? '';
+    
+    String imageUrl = p['image'] ?? '';
+
+    // Determine the color and index for the circle
+    final sectionName = _selectedMapPlace!['section'] as String?;
+    final color = _sectionColors[sectionName] ?? AppTheme.primary;
+    final icon = _sectionIcons[sectionName];
+    
+    int indexInSection = 1;
+    if (sectionName != null) {
+      final sectionList = _savedPlaces.where((d) => d['section'] == sectionName).toList();
+      sectionList.sort((a, b) => (a['sortOrder'] as int? ?? 0).compareTo(b['sortOrder'] as int? ?? 0));
+      indexInSection = sectionList.indexWhere((d) => d['id'] == _selectedMapPlace!['id']) + 1;
+    }
+
+    return Positioned(
+      left: 16,
+      right: 16,
+      bottom: 16.0,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 20,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Index Circle
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: (icon == null || icon.codePoint == Icons.looks_one_rounded.codePoint)
+                      ? Text(
+                          '$indexInSection',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        )
+                      : Icon(
+                          icon,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                ),
+                const SizedBox(width: 12),
+                // Texts
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.darkText,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (description.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Từ web: $description',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppTheme.subtitleText,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Thumbnail
+                if (imageUrl.isNotEmpty)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      imageUrl,
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        width: 60,
+                        height: 60,
+                        color: Colors.grey[200],
+                        child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Actions
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.white,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                        ),
+                        builder: (context) {
+                          return SaveToTripBottomSheet(
+                            place: _selectedMapPlace!['place'] ?? _selectedMapPlace!,
+                            onSaved: () {
+                              _loadData(); // refresh data if it was saved to the current trip
+                            },
+                          );
+                        },
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.bookmark_outline, color: Colors.white, size: 16),
+                          SizedBox(width: 4),
+                          Text(
+                            'Lưu',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'Chi tiết',
+                      style: TextStyle(color: AppTheme.darkText, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () async {
+                      if (p['latitude'] != null && p['longitude'] != null) {
+                        final lat = p['latitude'];
+                        final lon = p['longitude'];
+                        final url = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lon');
+                        if (await canLaunchUrl(url)) {
+                          await launchUrl(url);
+                        }
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF1F5F9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.directions, color: AppTheme.darkText, size: 18),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.auto_awesome, color: AppTheme.darkText, size: 16),
+                        SizedBox(width: 4),
+                        Text(
+                          'Hỏi AI',
+                          style: TextStyle(color: AppTheme.darkText, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -3410,30 +3940,18 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
   }
 
   Widget _buildPlaceTags(Map<String, dynamic> place) {
-    List<dynamic> subCategories = [];
-    final rawSub = place['subCategories'] ?? place['subcategories'] ?? place['sub_categories'];
+    List<dynamic> tags = [];
     
-    if (rawSub is List) {
-      subCategories = List.from(rawSub);
-    } else if (rawSub is String) {
-      try {
-        final decoded = jsonDecode(rawSub);
-        if (decoded is List) subCategories = List.from(decoded);
-      } catch (_) {}
-    }
-    
-    if (subCategories.isEmpty && place['category'] != null && place['category']['name'] != null) {
-      subCategories = [place['category']['name']];
-    }
-    
-    if (subCategories.isEmpty) {
-      subCategories = ['Điểm tham quan'];
+    if (place['category'] != null && place['category']['name'] != null) {
+      tags = [place['category']['name']];
+    } else {
+      tags = ['Điểm tham quan'];
     }
 
     return Wrap(
       spacing: 4,
       runSpacing: 4,
-      children: subCategories.map((cat) => Container(
+      children: tags.map((cat) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: const Color(0xFFF1F5F9),
@@ -3452,8 +3970,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
   }
 
   Widget _buildSavedPlaceCard(Map<String, dynamic> detail, int index) {
-    final bool isCollapsed = detail['isCollapsed'] == true || detail['iscollapsed'] == true;
     final int id = detail['id'] as int;
+    final bool isCollapsed = !_expandedPlaceIds.contains(id);
 
     if (detail['place'] == null && detail['noteText'] != null) {
       final sectionDetails = _savedPlaces.where((d) => d['section'] == detail['section']).toList();
@@ -3505,8 +4023,25 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
       }
     }
 
-    return GestureDetector(
-      onTap: () {
+    return VisibilityDetector(
+      key: Key("place_${detail['id']}"),
+      onVisibilityChanged: (info) {
+        if (info.visibleFraction > 0.6) {
+          if (_focusedPlaceId != detail['id']) {
+            setState(() {
+              _focusedPlaceId = detail['id'] as int?;
+            });
+            if (_isMapExpanded && place['latitude'] != null && place['longitude'] != null) {
+              final lat = (place['latitude'] as num).toDouble();
+              final lon = (place['longitude'] as num).toDouble();
+              // Offset latitude by -0.005 so marker is in the upper visible half
+              _mapController.move(LatLng(lat - 0.005, lon), 15.0);
+            }
+          }
+        }
+      },
+      child: GestureDetector(
+        onTap: () {
         if (_isSelectionMode && detail['id'] != null) {
           setState(() {
             if (_selectedItemIds.contains(id)) {
@@ -3516,8 +4051,12 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
             }
           });
         } else {
-          DatabaseService().updateNoteOrDetail(id, {'isCollapsed': !isCollapsed}, false).then((_) {
-            _loadData(silent: true);
+          setState(() {
+            if (isCollapsed) {
+              _expandedPlaceIds.add(id);
+            } else {
+              _expandedPlaceIds.remove(id);
+            }
           });
         }
       },
@@ -3575,8 +4114,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    width: 24,
-                    height: 24,
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
                       color:
                           _sectionColors[detail['section']] ??
@@ -3593,16 +4132,16 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
-                              fontSize: 12,
+                              fontSize: 14,
                             ),
                           )
                         : Icon(
                             _sectionIcons[detail['section']],
                             color: Colors.white,
-                            size: 14,
+                            size: 16,
                           ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3625,11 +4164,15 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                                 size: 12,
                               ),
                               const SizedBox(width: 4),
-                              Text(
-                                extraInfo,
-                                style: const TextStyle(
-                                  color: AppTheme.subtitleText,
-                                  fontSize: 11,
+                              Expanded(
+                                child: Text(
+                                  extraInfo,
+                                  style: const TextStyle(
+                                    color: AppTheme.subtitleText,
+                                    fontSize: 11,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
@@ -3693,17 +4236,44 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
             detail: detail,
             isItineraryDetail: false,
             onUpdate: () => _loadData(silent: true),
+            onShowEmojiPicker: () {
+              // Pass the current local state of reactions if needed, or get from detail
+              _showEmojiPickerSheet(
+                detail['id'],
+                detail['reactions'] is List
+                    ? detail['reactions']
+                    : (detail['reactions'] is String
+                        ? (json.decode(detail['reactions']) as List)
+                        : []),
+                false,
+              );
+            },
           ),
       ],
     ),
   ),
   if (!isCollapsed)
-    InlinePlaceBottomInfo(place: place),
+    InlinePlaceBottomInfo(
+      place: place,
+      onOpenMap: () {
+        if (place['latitude'] != null && place['longitude'] != null) {
+          final lat = (place['latitude'] as num).toDouble();
+          final lon = (place['longitude'] as num).toDouble();
+          setState(() {
+            _isMapExpanded = true;
+            _selectedMapPlace = detail;
+          });
+          // Offset latitude by -0.005 so marker is in the upper visible half
+          _mapController.move(LatLng(lat - 0.005, lon), 15.0);
+        }
+      },
+    ),
 ],
   ),
 ),
       ),
-    );
+    ),
+  );
   }
 
   // ================= TAB 1: TỔNG QUAN =================
@@ -3747,7 +4317,7 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                       section,
                       () => ExpansionTileController(),
                     ),
-                    initiallyExpanded: index == 0,
+                    initiallyExpanded: true,
                     tilePadding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 4,
@@ -4738,8 +5308,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
       },
       children: List.generate(dayDetails.length, (idx) {
         final detail = dayDetails[idx];
-        final id = detail['id'];
-        final bool isCollapsed = detail['isCollapsed'] == true || detail['iscollapsed'] == true;
+        final int id = detail['id'] as int;
+        final bool isCollapsed = !_expandedPlaceIds.contains(id);
 
         if (detail['place'] == null && detail['noteText'] != null) {
           return Container(
@@ -4788,9 +5358,26 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
           }
         }
 
-        final card = Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: Slidable(
+        final card = VisibilityDetector(
+          key: Key("itinerary_place_vis_${detail['id']}"),
+          onVisibilityChanged: (info) {
+            if (info.visibleFraction > 0.6) {
+              if (_focusedPlaceId != detail['id']) {
+                setState(() {
+                  _focusedPlaceId = detail['id'] as int?;
+                });
+                if (_isMapExpanded && place['latitude'] != null && place['longitude'] != null) {
+                  final lat = (place['latitude'] as num).toDouble();
+                  final lon = (place['longitude'] as num).toDouble();
+                  // Offset latitude by -0.005 so marker is in the upper visible half
+                  _mapController.move(LatLng(lat - 0.005, lon), 15.0);
+                }
+              }
+            }
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Slidable(
             key: ValueKey('itinerary_place_${detail['id']}'),
             endActionPane: ActionPane(
               motion: const ScrollMotion(),
@@ -4814,8 +5401,12 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
             ),
             child: GestureDetector(
               onTap: () {
-                DatabaseService().updateNoteOrDetail(id as int, {'isCollapsed': !isCollapsed}, true).then((_) {
-                  _loadData(silent: true);
+                setState(() {
+                  if (isCollapsed) {
+                    _expandedPlaceIds.add(id);
+                  } else {
+                    _expandedPlaceIds.remove(id);
+                  }
                 });
               },
               child: Column(
@@ -4844,8 +5435,8 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                     Container(
-                      width: 24,
-                      height: 24,
+                      width: 32,
+                      height: 32,
                       decoration: BoxDecoration(
                         color: customColor,
                         shape: BoxShape.circle,
@@ -4856,11 +5447,11 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
-                          fontSize: 12,
+                          fontSize: 14,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4931,16 +5522,42 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                           detail: detail,
                           isItineraryDetail: true,
                           onUpdate: () => _loadData(silent: true),
+                          onShowEmojiPicker: () {
+                            _showEmojiPickerSheet(
+                              detail['id'],
+                              detail['reactions'] is List
+                                  ? detail['reactions']
+                                  : (detail['reactions'] is String
+                                      ? (json.decode(detail['reactions']) as List)
+                                      : []),
+                              true,
+                            );
+                          },
                         ),
                     ],
                   ),
                 ),
                 if (!isCollapsed)
-                  InlinePlaceBottomInfo(place: place),
+                  InlinePlaceBottomInfo(
+                    place: place,
+                    onOpenMap: () {
+                      if (place['latitude'] != null && place['longitude'] != null) {
+                        final lat = (place['latitude'] as num).toDouble();
+                        final lon = (place['longitude'] as num).toDouble();
+                        setState(() {
+                          _isMapExpanded = true;
+                          _selectedMapPlace = detail;
+                        });
+                        // Offset latitude by -0.005 so marker is in the upper visible half
+                        _mapController.move(LatLng(lat - 0.005, lon), 15.0);
+                      }
+                    },
+                  ),
               ],
             ),
           ),
         ),
+      ),
       );
 
         Widget? travelSeparator;
@@ -5086,41 +5703,56 @@ class _TripOverviewScreenState extends State<TripOverviewScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // Day Header Row
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Text(
-                                _getDayLabel(index),
-                                style: const TextStyle(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w800,
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              setState(() {
+                                _dayCollapsed[index] = !isCollapsed;
+                              });
+                            },
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  isCollapsed
+                                      ? Icons.keyboard_arrow_right_rounded
+                                      : Icons.keyboard_arrow_down_rounded,
                                   color: AppTheme.darkText,
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () => _editDaySubtitle(index),
-                                  child: Text(
-                                    subtitle.isNotEmpty ? subtitle : 'Thêm tiêu đề phụ',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: subtitle.isNotEmpty ? AppTheme.darkText : Colors.grey[400],
-                                      fontWeight: subtitle.isNotEmpty ? FontWeight.w500 : FontWeight.normal,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                const SizedBox(width: 8),
+                                Text(
+                                  _getDayLabel(index),
+                                  style: const TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.darkText,
                                   ),
                                 ),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.more_horiz_rounded,
-                                  color: AppTheme.subtitleText,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => _editDaySubtitle(index),
+                                    child: Text(
+                                      subtitle.isNotEmpty ? subtitle : 'Thêm tiêu đề phụ',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: subtitle.isNotEmpty ? AppTheme.darkText : Colors.grey[400],
+                                        fontWeight: subtitle.isNotEmpty ? FontWeight.w500 : FontWeight.normal,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
                                 ),
-                                onPressed: () => _showDayOptionsSheet(index),
-                              ),
-                            ],
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.more_horiz_rounded,
+                                    color: AppTheme.subtitleText,
+                                  ),
+                                  onPressed: () => _showDayOptionsSheet(index),
+                                ),
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 8),
 

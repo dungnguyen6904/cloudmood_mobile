@@ -12,12 +12,14 @@ class InlinePlaceWhiteCardExtension extends StatefulWidget {
   final Map<String, dynamic> detail;
   final bool isItineraryDetail;
   final VoidCallback onUpdate;
+  final VoidCallback? onShowEmojiPicker;
 
   const InlinePlaceWhiteCardExtension({
     Key? key,
     required this.detail,
     required this.isItineraryDetail,
     required this.onUpdate,
+    this.onShowEmojiPicker,
   }) : super(key: key);
 
   @override
@@ -113,6 +115,10 @@ class _InlinePlaceWhiteCardExtensionState extends State<InlinePlaceWhiteCardExte
   }
 
   void _showEmojiPicker() {
+    if (widget.onShowEmojiPicker != null) {
+      widget.onShowEmojiPicker!();
+      return;
+    }
     showModalBottomSheet(
       context: context,
       builder: (context) {
@@ -307,51 +313,52 @@ class _InlinePlaceWhiteCardExtensionState extends State<InlinePlaceWhiteCardExte
                 ],
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        // Cost field
-        Row(
-          children: [
-            const Text(
-              '\$',
-              style: TextStyle(
-                color: AppTheme.subtitleText,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: _costController,
-                focusNode: _costFocus,
-                onChanged: _onCostChanged,
-                keyboardType: TextInputType.number,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.darkText,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Thêm chi phí',
-                  hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  '\$',
+                  style: TextStyle(
                     color: AppTheme.subtitleText,
                     fontWeight: FontWeight.bold,
+                    fontSize: 16,
                   ),
-                  border: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  errorBorder: InputBorder.none,
-                  disabledBorder: InputBorder.none,
-                  filled: false,
-                  fillColor: Colors.transparent,
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
                 ),
-              ),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 100,
+                  child: TextField(
+                    controller: _costController,
+                    focusNode: _costFocus,
+                    onChanged: _onCostChanged,
+                    keyboardType: TextInputType.number,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.darkText,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Thêm chi phí',
+                      hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.subtitleText,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      border: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      errorBorder: InputBorder.none,
+                      disabledBorder: InputBorder.none,
+                      filled: false,
+                      fillColor: Colors.transparent,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
+
         const SizedBox(height: 12),
         // Reactions
         Wrap(
@@ -366,18 +373,22 @@ class _InlinePlaceWhiteCardExtensionState extends State<InlinePlaceWhiteCardExte
                   widget.onUpdate();
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(20),
+                    color: AppTheme.primary.withAlpha(20),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.primary.withAlpha(50)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(emoji, style: const TextStyle(fontSize: 16)),
-                      const SizedBox(width: 6),
-                      const Text('1', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                      Text(emoji, style: const TextStyle(fontSize: 14)),
+                      const SizedBox(width: 3),
+                      const Text('1',
+                          style: TextStyle(
+                              color: AppTheme.primary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -386,12 +397,13 @@ class _InlinePlaceWhiteCardExtensionState extends State<InlinePlaceWhiteCardExte
             GestureDetector(
               onTap: _showEmojiPicker,
               child: Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
+                  color: Colors.white,
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                  border: Border.all(color: const Color(0xFFE2E8F0)), // AppTheme.border
                 ),
-                child: const Icon(Icons.add_reaction_outlined, color: Colors.grey, size: 20),
+                child: const Icon(Icons.sentiment_satisfied_alt_outlined, color: Color(0xFF64748B), size: 16), // AppTheme.subtitleText
               ),
             ),
           ],
@@ -403,8 +415,9 @@ class _InlinePlaceWhiteCardExtensionState extends State<InlinePlaceWhiteCardExte
 
 class InlinePlaceBottomInfo extends StatelessWidget {
   final Map<String, dynamic> place;
+  final VoidCallback? onOpenMap;
 
-  const InlinePlaceBottomInfo({Key? key, required this.place}) : super(key: key);
+  const InlinePlaceBottomInfo({Key? key, required this.place, this.onOpenMap}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -473,7 +486,7 @@ class InlinePlaceBottomInfo extends StatelessWidget {
               children: [
                 _buildActionButton(Icons.search, 'Hỏi AI', true, context),
                 const SizedBox(width: 8),
-                _buildActionButton(Icons.map_outlined, '', false, context),
+                _buildActionButton(Icons.map_outlined, '', false, context, onTap: onOpenMap),
                 const SizedBox(width: 8),
                 _buildActionButton(Icons.directions_outlined, '', false, context),
                 const SizedBox(width: 8),
@@ -626,7 +639,7 @@ class InlinePlaceBottomInfo extends StatelessWidget {
                         if (address.isNotEmpty)
                           GestureDetector(
                             onTap: () async {
-                              final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(address)}');
+                              final url = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(address)}');
                               if (await canLaunchUrl(url)) {
                                 await launchUrl(url);
                               }
@@ -691,29 +704,46 @@ class InlinePlaceBottomInfo extends StatelessWidget {
         Icon(icon, color: AppTheme.subtitleText, size: 20),
         const SizedBox(width: 12),
         Expanded(
-          child: customChild ?? Text(
-            text,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: isLink ? AppTheme.primary : AppTheme.darkText,
-              height: 1.4,
-            ),
-          ),
+          child: customChild ?? (trailing != null 
+            ? Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(text: text),
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.middle,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 8.0),
+                        child: trailing,
+                      ),
+                    ),
+                  ],
+                ),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: isLink ? AppTheme.primary : AppTheme.darkText,
+                  height: 1.4,
+                ),
+              )
+            : Text(
+                text,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: isLink ? AppTheme.primary : AppTheme.darkText,
+                  height: 1.4,
+                ),
+              )),
         ),
-        if (trailing != null) ...[
-          const SizedBox(width: 8),
-          trailing,
-        ],
       ],
     );
   }
 
-  Widget _buildActionButton(IconData? icon, String label, bool isPrimary, BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: isPrimary ? AppTheme.primary : AppTheme.primary.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-      ),
+  Widget _buildActionButton(IconData? icon, String label, bool isPrimary, BuildContext context, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isPrimary ? AppTheme.primary : AppTheme.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+        ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -730,6 +760,7 @@ class InlinePlaceBottomInfo extends StatelessWidget {
               ),
             ),
         ],
+      ),
       ),
     );
   }
